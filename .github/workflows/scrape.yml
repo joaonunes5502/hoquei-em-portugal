@@ -1,1 +1,42 @@
+name: Atualizar dados do hp.fpp.pt
 
+on:
+  schedule:
+    # Horas em UTC (Portugal = UTC no inverno, UTC+1 no verão).
+    - cron: "*/10 14-23 * * *"  # de 10 em 10 min entre as 14h e as 24h: horas dos jogos
+    - cron: "7 0-13 * * *"      # de hora a hora no resto do dia
+    - cron: "17 5 * * *"        # 1x por dia às 05:17: competições novas e plantéis completos
+    # NOTA: num repositório PÚBLICO o GitHub Actions é grátis e ilimitado.
+    # Num repositório PRIVADO tens ~2000 min/mês grátis: troca "*/10" por "*/30".
+  workflow_dispatch:          # botão "Run workflow" para correr à mão
+    inputs:
+      modo:
+        description: "rapido ou completo"
+        required: true
+        default: "completo"
+
+concurrency:
+  group: scraper
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - run: pip install -r scraper/requirements.txt
+      - name: Correr o robô
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          MODO="rapido"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then MODO="${{ github.event.inputs.modo }}"; fi
+          if [ "${{ github.event.schedule }}" = "17 5 * * *" ]; then MODO="completo"; fi
+          python scraper/scrape.py "$MODO"
