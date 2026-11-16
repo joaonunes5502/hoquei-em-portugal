@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#5e1520">
+<title>Hóquei em Português</title>
+<meta name="description" content="Resultados, classificações, plantéis e notícias do hóquei em patins português.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+<div id="demo">MODO DEMONSTRAÇÃO — preenche o config.js com os dados do Supabase para ver os dados reais</div>
+<header><div class="wrap">
+  <a href="#/" class="logo"><img id="logoImg" alt="Hóquei em Português" onload="this.nextElementSibling.style.display='none'" onerror="this.remove()"><span class="wm"><b>Hóquei</b><span>em Português</span></span></a>
+  <nav class="quick" id="quick">
+    <a href="#/competicao" data-k="comp">Resultados</a><a href="#/noticias" data-k="news">Notícias</a><a href="#/clubes" data-k="clubs">Clubes</a><a href="#/mercado" data-k="mkt">Mercado</a><a href="#/onde-ver" data-k="tv">Onde ver</a>
+  </nav>
+  <button class="hbtn circ" id="themeBtn" aria-label="Modo noite">☾</button>
+  <button class="hbtn red" id="menuBtn"><span class="burger"><i></i></span><span class="lbl2">Menu</span></button>
+</div></header>
+
+<div class="menu" id="menu"><div class="wrap">
+  <div class="top"><span class="x" style="font-size:20px">Hóquei em Português</span><button class="hbtn" id="menuClose">Fechar ✕</button></div>
+  <div class="search"><input id="q" placeholder="Pesquisar: clube, jogador, notícia…" autocomplete="off"></div>
+  <div class="res" id="res"></div>
+  <div class="cols" id="menuCols"></div>
+</div></div>
+
+<div class="board"><div class="wrap" id="board"></div></div>
+<main id="app"></main>
+
+<footer><div class="wrap">
+  <div class="cols">
+    <div><div class="x" style="font-size:26px;line-height:1">Hóquei<br>em Português</div><p style="margin-top:14px">O hóquei em patins português, jornada a jornada. Resultados, notícias, mercado e tudo o que acontece dentro e fora do ringue.</p></div>
+    <div><h5>Competições</h5><div id="footComps"></div><a href="#/selecoes">Seleções</a></div>
+    <div><h5>Explorar</h5><a href="#/noticias">Notícias</a><a href="#/clubes">Clubes</a><a href="#/mercado">Mercado</a><a href="#/equipa-da-jornada">Equipa da Jornada</a><a href="#/onde-ver">Onde ver</a><a href="#/sobre">Sobre</a></div>
+    <div><h5>Segue-nos</h5><a href="https://www.instagram.com/hoqueiemportugues/" target="_blank">Instagram · @hoqueiemportugues ↗</a><a href="#/sobre">Envia a tua notícia</a><a href="#/sobre">Parcerias e publicidade</a></div>
+  </div>
+  <div class="word">HÓQUEI</div>
+  <div class="bot"><span>© Hóquei em Português</span><span>Resultados e classificações: hp.fpp.pt</span></div>
+</div></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="demo.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

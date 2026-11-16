@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Backoffice · Hóquei em Português</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--red:#7A1C28;--red-d:#5E1520;--paper:#F2EEE6;--paper-2:#E8E2D7;--ink:#121212;--ink-2:#5A5650;--line:#D6CFC2;--card:#FBF9F5}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Archivo,sans-serif;background:var(--paper);color:var(--ink);font-size:15px;line-height:1.45}
+a{color:inherit}button{font:inherit;cursor:pointer}
+h1{font-stretch:125%;font-weight:900;text-transform:uppercase;font-size:34px;line-height:1;margin-bottom:18px}
+h2{font-stretch:110%;font-weight:800;text-transform:uppercase;font-size:20px;margin:28px 0 10px}
+#demo{display:none;background:#FFC94D;text-align:center;font-family:"IBM Plex Mono";font-size:12px;padding:6px}
+#login{min-height:100vh;display:none;place-items:center;padding:20px}
+.lbox{background:var(--card);border:2px solid var(--ink);border-radius:0 48px 0 48px;padding:40px;width:min(420px,100%)}
+.lbox h1{font-size:28px}.lbox p{color:var(--ink-2);margin-bottom:18px}
+.lbox input{width:100%;height:46px;border:2px solid var(--ink);border-radius:999px;padding:0 18px;font:inherit;margin-bottom:10px;background:#fff}
+#lmsg{font-size:14px;color:var(--red);margin-top:12px}#lmsg code{display:block;background:#fff;padding:8px;margin-top:6px;font-size:12px;color:var(--ink);word-break:break-all}
+.link{background:none;border:0;text-decoration:underline;color:var(--ink-2);margin-top:10px;font-size:14px}
+#app{display:none;min-height:100vh}
+.top{position:sticky;top:0;z-index:5;background:var(--red-d);color:#fff;height:58px;display:flex;align-items:center;gap:16px;padding:0 22px}
+.top b{font-stretch:125%;font-weight:900;text-transform:uppercase}.top .sp{flex:1}.top small{opacity:.75;font-family:"IBM Plex Mono";font-size:12px}
+.top button{background:none;border:1.5px solid rgba(255,255,255,.6);color:#fff;border-radius:999px;padding:6px 14px}
+#burger{display:none}
+.lay{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 58px)}
+#side{border-right:2px solid var(--ink);padding:18px 12px;background:var(--paper)}
+#nav a{display:block;padding:10px 14px;border-radius:12px;text-decoration:none;font-weight:600}
+#nav a:hover{background:var(--paper-2)}#nav a.on{background:var(--red);color:#fff}
+#side .ext{margin-top:20px;padding:0 14px;font-size:13px}#side .ext a{display:block;padding:4px 0;color:var(--ink-2)}
+#main{padding:30px 34px 80px;max-width:1150px}
+.head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}.head h1{margin:0}
+.hint{color:var(--ink-2);margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;height:42px;padding:0 20px;border-radius:999px;background:var(--red);color:#fff;border:2px solid var(--red);font-weight:700;text-decoration:none;white-space:nowrap}
+.btn:hover{background:var(--red-d)}.btn.o{background:none;color:var(--ink);border-color:var(--ink)}.btn.o:hover{background:var(--ink);color:#fff}
+.btn.danger{background:none;color:#B42318;border-color:#B42318}.btn.sm{height:32px;padding:0 12px;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.card{background:var(--card);border:1.5px solid var(--line);border-radius:0 30px 0 0;padding:18px}
+.card span{font-family:"IBM Plex Mono";font-size:11px;text-transform:uppercase;color:var(--ink-2)}.card b{display:block;font-size:30px;font-stretch:110%;margin:6px 0 2px}.card small{color:var(--ink-2)}
+.card.warn{border-color:#D69E2E;background:#FFF8E6}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+pre.err{background:#fff;border:1.5px solid #B42318;padding:12px;font-size:12px;white-space:pre-wrap}
+.search{width:100%;max-width:420px;height:42px;border:2px solid var(--ink);border-radius:999px;padding:0 16px;font:inherit;margin:8px 0 16px;background:#fff}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.filters select{height:42px;border:2px solid var(--ink);border-radius:999px;padding:0 14px;font:inherit;background:#fff;max-width:100%}
+.tbl{width:100%;border-collapse:collapse;background:var(--card)}
+.tbl th{font-family:"IBM Plex Mono";font-size:11px;font-weight:500;text-transform:uppercase;color:var(--ink-2);text-align:left;padding:10px;border-bottom:2px solid var(--ink)}
+.tbl td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tr[data-h]{cursor:pointer}.tbl tr[data-h]:hover{background:var(--paper-2)}
+.in,.tbl select{height:34px;border:1.5px solid var(--line);border-radius:8px;padding:0 8px;font:inherit;width:100%;background:#fff}
+img.mini{width:30px;height:30px;object-fit:contain}
+.sw{display:inline-block;width:22px;height:22px;border-radius:50%;border:1px solid var(--line)}
+.tag{font-size:11px;font-weight:700;text-transform:uppercase;border:1.5px solid var(--ink);border-radius:999px;padding:2px 8px;white-space:nowrap}.tag.ok{border-color:#2E7D4F;color:#2E7D4F}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:16px 22px;background:var(--card);border:1.5px solid var(--line);padding:26px;border-radius:0 40px 0 0}
+.fld{display:flex;flex-direction:column;gap:6px}.fld.wide{grid-column:1/-1}
+.fld label{font-weight:700;font-size:14px}.fld label small{display:block;font-weight:400;color:var(--ink-2);font-size:12px}
+.fld input:not([type=checkbox]):not([type=file]):not([type=radio]),.fld select,.fld textarea{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;background:#fff;width:100%}
+.fld input[type=color]{height:44px;padding:4px}
+.fld textarea{resize:vertical;line-height:1.55}
+.fld.chk label{font-weight:600;display:flex;gap:8px;align-items:center;padding-top:22px}
+.tbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.tbar button{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:3px 10px;font-weight:700}.tbar span{font-size:12px;color:var(--ink-2)}
+.imgf{display:flex;gap:14px;align-items:center}.imgf img{width:160px;height:100px;object-fit:cover;border-radius:0 20px 0 0;background:var(--paper-2)}.imgf div{flex:1;display:flex;flex-direction:column;gap:8px}
+.multi{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px;max-height:200px;overflow:auto;border:1.5px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+.multi label{font-weight:400;display:flex;gap:6px;align-items:center}
+.flt{border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit}
+.bar{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.back{display:inline-block;margin-bottom:14px;color:var(--ink-2);text-decoration:none;font-weight:600}
+.ch{display:flex;gap:18px;align-items:center;margin-bottom:18px}.ch img{width:80px;height:80px;object-fit:contain;background:#fff;border-radius:16px;padding:6px}.ch h1{margin-bottom:4px}
+.msg{background:var(--card);border:1.5px solid var(--line);padding:16px 18px;margin-bottom:12px}.msg.nova{border-color:var(--red)}
+.msg .mh{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}.msg .mh small{margin-left:auto;color:var(--ink-2)}
+.msg p{margin-bottom:10px}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-weight:600;transition:.25s;z-index:20;opacity:0}
+#toast.show{transform:translateX(-50%);opacity:1}#toast.bad{background:#B42318}
+@media(max-width:860px){.lay{grid-template-columns:1fr}#side{display:none;position:fixed;inset:58px 0 0 0;z-index:4;overflow:auto}#side.open{display:block}#burger{display:block}.form{grid-template-columns:1fr}.cards{grid-template-columns:1fr 1fr}#main{padding:20px 16px 80px}.tbl{font-size:13px}.top small{display:none}}
+</style>
+</head>
+<body>
+<div id="demo">MODO DEMONSTRAÇÃO — entra com qualquer email/palavra-passe. Nada é guardado. Preenche o config.js para usar o Supabase.</div>
+<div id="login"><form class="lbox" id="lf"><h1>Backoffice</h1><p>Hóquei em Português</p><input id="le" type="email" placeholder="Email" required autocomplete="username"><input id="lp" type="password" placeholder="Palavra-passe" required autocomplete="current-password"><button class="btn" style="width:100%;justify-content:center">Entrar</button><button type="button" class="link" id="forgot">Esqueci-me da palavra-passe</button><div id="lmsg"></div><button type="button" class="link logout" id="lout" style="display:none">Sair</button></form></div>
+<div id="app">
+  <div class="top"><button id="burger">☰</button><b>Hóquei em Português</b><span class="sp"></span><small id="who"></small><button class="logout">Sair</button></div>
+  <div class="lay"><aside id="side"><nav id="nav"></nav><div class="ext"><a href="index.html" target="_blank">Ver o site ↗</a></div></aside><main id="main"></main></div>
+</div>
+<div id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="demo.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

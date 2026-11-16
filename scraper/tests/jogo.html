@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<body>
+<div id="principal">
+ <h1 style="margin-bottom:5px;">
+ Campeonato Placard HP - Fase Regular </h1>
+ <div class="scoreboard" id="scoreboard">
+ <div class="competition-info">
+ <h4>Campeonato Placard HP - Fase Regular</h4>
+ <p>1ª Jornada | 2026-11-08 | 16:00</p>
+ </div>
+ <div class="row align-items-center">
+ <div class="col-4 text-center">
+ <a href="/Equipa/493/1182">
+ <img src="https://plataforma.fpp.pt/Files/CLUBE_123.png" alt="Team 1 Logo" class="team-logo">
+ <p class="team-name">J. Pacense / Des Compagnons</p>
+ </a>
+ </div>
+ <div class="col-4 result-col">
+ <!--p class="date-time">2026-11-08 16:00</p-->
+ <p class='score provisorio sc'>5-3</p><p><span class='num-faltas'>5 - 3</span></p>
+ </div>
+ <div class="col-4 text-center">
+ <a href="/Equipa/493/1184">
+ <img src="https://plataforma.fpp.pt/Files/CLUBE_129.png" alt="Team 2 Logo" class="team-logo">
+ <p class="team-name">AJ Viana </p>
+ </a>
+ </div>
+ <p class="col-md-12" style="text-align: center;">Árbitros: Carlos Correia, Silvia Coelho, Hélder Pereira, Alexandre Pinto</p>
+ </div>
+ </div>
+ <div class="live-time section-content" id="Timeline" style="">
+ </div>
+ <div class="teams-container section-content" id="Equipas" style="display: none;">
+ <div class="col-md-6">
+ <div class="team">
+ <h2>J. Pacense / Des Compagnons</h2>
+ <h3>Jogadores</h3>
+ <div class="players">
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161518.png" alt="Avatar">
+ <p>N.º 1 - Àlvaro Shehda (5i)</p>
+ </div>
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161551.jpg" alt="Avatar">
+ <p>N.º 78 - Abreu (5i)</p>
+ </div>
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161488.png" alt="Avatar">
+ <p>N.º 57 - Ezequiel Funes (J)</p>
+ </div>
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161546.jpg" alt="Avatar">
+ <p>N.º 7 - Flórido (J)</p>
+ </div>
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161645.png" alt="Avatar">
+ <p>N.º 77 - Franco Serfaty (5i)</p>
+ </div>
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_160001_165000/FED_161555.jpg" alt="Avatar">
+ <p>N.º 10 - Gabi Costa</p>
+ </div> </div>
+ <h3>Técnicos</h3>
+ <div class="staff">
+ <div class="staff-member">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_175001_180000/FED_177028.jpeg" alt="Avatar">
+ <p>Treinador - Hugo Azevedo</p>
+ </div> </div>
+ </div>
+ </div>
+ <div class="col-md-6">
+ <div class="team">
+ <h2>AJ Viana </h2>
+ <h3>Jogadores</h3>
+ <div class="players">
+ <div class="player">
+ <img src="https://plataforma.fpp.pt/Files/FED_166353.png" alt="Avatar">
+ <p>N.º 25 - Rafa Almeida (5i)</p>
+ </div> </div>
+ <h3>Técnicos</h3>
+ <div class="staff">
+ <div class="staff-member">
+ <img src="https://plataforma.fpp.pt/Files/FED/FED_170001_175000/FED_171450.png" alt="Avatar">
+ <p>Treinador - André Torres</p>
+ </div> </div>
+ </div>
+ </div>
+ </div>
+ <div class="game-stats section-content" id="Estatisticas" style=" display:none;">
+ </div>
+</div>
+</body>
+</html>
+<script>
+window.onload = function() {
+ $.ajax({
+ url: "/Views/ajax_jogo.php",
+ data: 'epoca=136&jogoNumero=3&linkTV=https://tv.fpp.pt/video?videoId=e-5518&amp;metaname=compID&amp;metavalue=CPHP&amp;stageId=&amp;metaseason=&clubeVisitado=353&clubeVisitante=289&competicao=493&token=368ad6e4accc753f8755c11362900459d2b8a718b567701d92f15021e141f147',
+ success: function(data) {
+ $('#Timeline').html(data);
+ }
+ });
+ $.ajax({
+ url: "/Views/ajax_estatisticasJogo.php",
+ data: 'epoca=136&jogoNumero=3&clubeVisitado=353&clubeVisitante=289&equipaVisitada=1182&equipaVisitante=1184&data=2026-11-08',
+ success: function(data) {
+ $('#Estatisticas').html(data);
+ }
+ });
+};
+</script>
