@@ -3,8 +3,8 @@ name: Atualizar dados do hp.fpp.pt
 on:
   schedule:
     # Horas em UTC (Portugal = UTC no inverno, UTC+1 no verão).
-    - cron: "*/10 14-23 * * *"  # de 10 em 10 min entre as 14h e as 24h: horas dos jogos
-    - cron: "7 0-13 * * *"      # de hora a hora no resto do dia
+    - cron: "*/10 9-23 * * *"   # de 10 em 10 min entre as 9h e as 24h: horas dos jogos (e das notificações)
+    - cron: "7 0-8 * * *"       # de hora a hora durante a noite
     - cron: "17 5 * * *"        # 1x por dia às 05:17: competições novas e plantéis completos
     # NOTA: num repositório PÚBLICO o GitHub Actions é grátis e ilimitado.
     # Num repositório PRIVADO tens ~2000 min/mês grátis: troca "*/10" por "*/30".
@@ -35,6 +35,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
         run: |
           MODO="rapido"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then MODO="${{ github.event.inputs.modo }}"; fi
