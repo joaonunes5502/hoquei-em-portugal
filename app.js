@@ -53,9 +53,10 @@ async function ins(table, row) {
 /* ---------------- dados base ---------------- */
 const B = { comps: [], clubes: new Map(), equipas: new Map(), defs: {} };
 async function loadBase() {
-  const [comps, clubes, equipas, defs] = await Promise.all([
+  const [comps, clubes, equipas, defs, spons] = await Promise.all([
     q("competicoes", { eq: { ativa: true }, order: [["ordem", true], ["id", true]] }),
-    q("clubes"), q("equipas", { select: "id,competicao_id,clube_id,nome" }), q("definicoes")]);
+    q("clubes"), q("equipas", { select: "id,competicao_id,clube_id,nome" }), q("definicoes"), q("patrocinios", { order: [["ordem", true]] })]);
+  B.spons = spons;
   B.comps = comps;
   clubes.forEach(c => B.clubes.set(c.id, c));
   equipas.forEach(e => B.equipas.set(e.id, e));
@@ -63,6 +64,13 @@ async function loadBase() {
 }
 const principal = () => B.comps.find(c => c.principal) || B.comps[0];
 const compById = id => B.comps.find(c => c.id === id);
+// competições do menu principal vs "mais competições" (definido no backoffice; se nada estiver definido, as 6 primeiras)
+const compsPrincipais = () => { const p = B.comps.filter(c => c.menu === "principal"); return p.length ? p : B.comps.slice(0, 6); };
+const compsMais = () => { const p = compsPrincipais(); return B.comps.filter(c => !p.includes(c)); };
+function compPicker(c, tab) {
+  const mais = compsMais();
+  return `<div class="cpick"><div class="chips cp-chips">${compsPrincipais().map(x => `<a class="chip ${x.id === c.id ? "on" : ""}" href="#/competicao/${x.id}/${tab}">${esc(cn(x))}</a>`).join("")}</div>${mais.length ? `<select class="input cp-sel" onchange="if(this.value)go('/competicao/'+this.value+'/${tab}')"><option value="">Mais competições ▾</option>${mais.map(x => `<option value="${x.id}" ${x.id === c.id ? "selected" : ""}>${esc(cn(x))}</option>`).join("")}</select>` : ""}</div>`;
+}
 const cn = c => c ? (c.nome_curto || c.nome) : "";
 const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
 const sufixo = n => (clean(n).match(/\s([B-D])$/) || [])[1];
@@ -111,11 +119,11 @@ const ultimaJornada = jogos => { const js = jogos.filter(j => j.golos_casa != nu
 /* ---------------- menu, placar, pesquisa ---------------- */
 function buildMenu() {
   const sm = (t, l) => `<h5>${t}</h5><div class="sm">${l.map(a => `<a href="${a[1]}" ${/^http/.test(a[1]) ? 'target="_blank"' : ""}>${esc(a[0])}</a>`).join("")}</div>`;
-  $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${B.comps.slice(0, 7).map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(cn(c))}</a>`).join("")}</div>
-  <div>${sm("Mais competições", B.comps.slice(7).map(c => [cn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
+  $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(cn(c))}</a>`).join("")}</div>
+  <div>${sm("Mais competições", compsMais().map(c => [cn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
   <div>${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
-  $("#footComps").innerHTML = B.comps.slice(0, 6).map(c => `<a href="#/competicao/${c.id}">${esc(cn(c))}</a>`).join("");
+  $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(cn(c))}</a>`).join("");
 }
 function openMenu() { $("#menu").classList.add("open"); document.body.style.overflow = "hidden"; setTimeout(() => $("#q").focus(), 50); }
 function closeMenu() { $("#menu").classList.remove("open"); document.body.style.overflow = ""; }
@@ -164,13 +172,14 @@ async function pHome() {
     s += `<section class="hero">${RINK.replace('class="rinkline"', 'class="rinkline" style="right:-120px;top:10px;width:900px"')}<div class="wrap"><span class="pill">Hóquei em Português</span><h1 class="x" style="margin-top:22px">O hóquei em patins<br><em>jornada a jornada.</em></h1><p class="lead">Resultados, classificações, plantéis e notícias de todas as competições nacionais.</p>${c ? `<a class="btn" href="#/competicao/${c.id}">Ver ${esc(cn(c))} →</a>` : ""}</div></section>`;
   }
   if (rest.length) s += `<section style="padding-top:20px"><div class="wrap"><div class="sh"><span class="idx">01</span><h2 class="x">Últimas</h2><div class="rail-ctrl"><button class="hbtn circ" data-rail="-1">←</button><button class="hbtn circ" data-rail="1">→</button><a class="hbtn" href="#/noticias">Todas</a></div></div><div class="rail" id="rail">${rest.map(nc).join("")}</div></div></section>`;
+  { const sp = sponsor("inicio"); if (sp) s += `<div class="wrap" style="margin-top:10px">${sp}</div>`; }
   if (c) s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px">
     <div>${sh("02", (last[0]?.jornada_nome || "Jornada"), ["Todos os jogos", `#/competicao/${c.id}/1`])}<div class="mini">${last.map(j => `<a class="r" href="#/jogo/${j.id}"><span class="a">${esc(tName(j.casa_id))} ${crest(j.casa_id)}</span><span class="s">${score(j) || esc(j.hora || "—")}</span><span>${crest(j.fora_id)}${esc(tName(j.fora_id))}</span></a>`).join("") || empty("Sem jogos.")}</div></div>
     <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${clubOfTeam(r.equipa_id)?.id || ""}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="grid-template-columns:${ej.length ? "1.4fr 1fr" : "1fr"};gap:56px">
-    ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}</div>` : ""}
+    ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}${sponsor("equipa_jornada")}</div>` : ""}
     <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span><b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
-  s += `<section style="padding-top:20px"><div class="wrap">${sh("06", "Competições")}<div class="compcards">${B.comps.map(x => `<a class="cc rink-r" href="#/competicao/${x.id}"><span class="ar">↗</span><span class="lbl">${esc(x.grupo || "")}</span><span class="x">${esc(cn(x))}</span></a>`).join("")}</div></div></section>`;
+  s += `<section style="padding-top:20px"><div class="wrap">${sh("06", "Competições")}<div class="compcards">${[...compsPrincipais(), ...compsMais()].map(x => `<a class="cc rink-r" href="#/competicao/${x.id}"><span class="ar">↗</span><span class="lbl">${esc(x.grupo || "")}</span><span class="x">${esc(cn(x))}</span></a>`).join("")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px"><div>${sh("07", "Mercado", ["Todas as mexidas", "#/mercado"])}${mkt.map(trRow).join("") || empty("Sem movimentos registados.")}</div><div>${sh("08", "Onde ver", ["Agenda", "#/onde-ver"])}${tv.map(tvRow).join("") || empty("Sem transmissões anunciadas.")}</div></div></section>`;
   s += `<div class="newsband"><div class="wrap"><div><span class="lbl" style="color:rgba(255,255,255,.7)">Newsletter</span><h2 class="x" style="margin-top:10px">A jornada inteira<br>no teu email.</h2><p style="opacity:.85;margin-top:14px;max-width:460px;font-size:18px">Resultados, tabela, equipa da jornada e as mexidas do mercado, todas as semanas.</p></div><form id="nlf"><input class="input" type="email" name="email" placeholder="o-teu@email.pt" required><button class="btn">Subscrever</button><label><input type="checkbox" required> Aceito receber a newsletter do Hóquei em Português</label></form></div></div>`;
   if (news.length) s += `<section><div class="wrap"><div class="sh"><span class="idx">09</span><h2 class="x">@${esc(CFG.INSTAGRAM || "hoqueiemportugues")}</h2><a class="more" href="https://www.instagram.com/${esc(CFG.INSTAGRAM || "hoqueiemportugues")}/" target="_blank">Seguir no Instagram ↗</a></div><div class="ig">${news.slice(0, 6).map(n => `<a href="https://www.instagram.com/${esc(CFG.INSTAGRAM || "hoqueiemportugues")}/" target="_blank">${img(n.imagem_url)}</a>`).join("")}</div></div></section>`;
@@ -187,7 +196,7 @@ function newsletterForm() {
   const f = $("#nlf"); if (!f) return;
   f.onsubmit = async e => { e.preventDefault(); const email = f.email.value.trim().toLowerCase(); const { error } = await ins("newsletter", { email }); f.innerHTML = `<h3 class="x" style="font-size:30px">${error && !/duplicate/i.test(error.message) ? "Não foi possível subscrever. Tenta mais tarde." : "Estás dentro. Até à próxima jornada!"}</h3>`; };
 }
-const POSXY = { "Guarda-redes": [[9, 50]], "Defesa": [[34, 26], [34, 74]], "Médio": [[62, 30], [58, 50]], "Avançado": [[70, 72], [80, 40]] };
+const POSXY = { "Guarda-redes": [[12, 50]], "Defesa": [[34, 26], [34, 74]], "Médio": [[62, 30], [58, 50]], "Avançado": [[70, 72], [80, 40]] };
 function rinkTeam(ej) {
   const used = {};
   const pl = (ej.jogadores || []).map((p, i) => { const k = POSXY[p.posicao] ? p.posicao : "Avançado"; used[k] = (used[k] || 0); const xy = POSXY[k][used[k]++ % POSXY[k].length]; const c = B.clubes.get(+p.clube_id); return `<div class="player" style="left:${xy[0]}%;top:${xy[1]}%"><div class="shirt" style="background:${esc(c?.cor || "#7A1C28")}">${esc(p.numero ?? "")}</div><b>${esc(p.nome)}</b><small>${esc(clubName(c))}</small></div>`; }).join("");
@@ -205,7 +214,7 @@ async function pNoticia(slug) {
   if (!n) return { html: hd([["Notícias", "#/noticias"]], "Notícia não encontrada") };
   const more = (await q("noticias", { order: [["publicado_em", false]], limit: 5 })).filter(x => x.id !== n.id).slice(0, 4);
   const clubs = (n.clubes || []).map(id => B.clubes.get(id)).filter(Boolean);
-  return { html: hd([["Notícias", "#/noticias"], [newsCat(n)]], n.titulo) + `<section style="padding-top:28px"><div class="wrap"><div class="article"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span class="pill">${esc(newsCat(n))}</span><span class="lbl">${esc(fmtDN(n.publicado_em))}${n.autor ? " · " + esc(n.autor) : ""}</span></div>${n.imagem_url ? img(n.imagem_url, n.titulo, "rink") : ""}${n.credito_foto ? `<p class="credit" style="margin:-18px 0 22px">Foto: ${esc(n.credito_foto)}</p>` : ""}${n.resumo ? `<p><b>${esc(n.resumo)}</b></p>` : ""}<div class="corpo">${para(n.corpo)}</div>${clubs.length ? `<div class="chips" style="margin-top:22px">${clubs.map(c => `<a class="chip" style="display:inline-flex;align-items:center;gap:6px" href="#/clube/${c.id}">${crestC(c, 20)}${esc(clubName(c))}</a>`).join("")}</div>` : ""}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px"><button class="btn o" id="cp">Copiar link</button></div></div></div></section>${more.length ? `<section style="padding-top:0"><div class="wrap">${sh("+", "Mais notícias")}<div class="grid g4">${more.map(nc).join("")}</div></div></section>` : ""}`,
+  return { html: hd([["Notícias", "#/noticias"], [newsCat(n)]], n.titulo) + `<section style="padding-top:28px"><div class="wrap"><div class="article"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span class="pill">${esc(newsCat(n))}</span><span class="lbl">${esc(fmtDN(n.publicado_em))}${n.autor ? " · " + esc(n.autor) : ""}</span></div>${n.imagem_url ? img(n.imagem_url, n.titulo, "rink") : ""}${n.credito_foto ? `<p class="credit" style="margin:-18px 0 22px">Foto: ${esc(n.credito_foto)}</p>` : ""}${n.resumo ? `<p><b>${esc(n.resumo)}</b></p>` : ""}<div class="corpo">${para(n.corpo)}</div>${clubs.length ? `<div class="chips" style="margin-top:22px">${clubs.map(c => `<a class="chip" style="display:inline-flex;align-items:center;gap:6px" href="#/clube/${c.id}">${crestC(c, 20)}${esc(clubName(c))}</a>`).join("")}</div>` : ""}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:24px"><button class="btn o" id="cp">Copiar link</button></div>${sponsor("noticia")}</div></div></section>${more.length ? `<section style="padding-top:0"><div class="wrap">${sh("+", "Mais notícias")}<div class="grid g4">${more.map(nc).join("")}</div></div></section>` : ""}`,
     after: () => { $("#cp").onclick = function () { try { navigator.clipboard.writeText(location.href); this.textContent = "Link copiado ✓"; } catch (e) { } }; } };
 }
 
@@ -214,10 +223,10 @@ async function pComp(id, tab) {
   tab = +tab || 0;
   const [jogos, cls, mk] = await Promise.all([q("jogos", { eq: { competicao_id: c.id }, order: [["jornada", true], ["data", true], ["hora", true]] }), q("classificacao", { eq: { competicao_id: c.id }, order: [["pos", true]] }), q("marcadores", { eq: { competicao_id: c.id }, order: [["pos", true]], limit: 50 })]);
   const base = `#/competicao/${c.id}`;
-  const chips = `<div class="chips" style="margin-bottom:22px">${B.comps.map(x => `<a class="chip ${x.id === c.id ? "on" : ""}" style="display:inline-flex;align-items:center" href="#/competicao/${x.id}/${tab}">${esc(cn(x))}</a>`).join("")}</div>`;
+  const chips = compPicker(c, tab);
   let body = "", after;
   if (tab === 0) {
-    body = cls.length ? `<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">V</th><th class="c">E</th><th class="c">D</th><th class="c">Golos</th><th class="c">DG</th><th class="c">Pts</th><th>Forma</th></tr></thead><tbody>${cls.map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${clubOfTeam(r.equipa_id)?.id || ""}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.v}</td><td class="c num">${r.e}</td><td class="c num">${r.d}</td><td class="c num">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>` : empty("Esta prova não tem classificação (ou ainda não começou).");
+    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${clubOfTeam(r.equipa_id)?.id || ""}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>` : empty("Esta prova não tem classificação (ou ainda não começou).");
   } else if (tab === 1) {
     const jors = [...new Set(jogos.map(j => j.jornada))].filter(x => x != null).sort((a, b) => a - b);
     let cur = ultimaJornada(jogos);
@@ -229,30 +238,145 @@ async function pComp(id, tab) {
   } else {
     body = mk.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th>Clube</th><th class="c">Golos</th></tr></thead><tbody>${mk.map(m => `<tr class="${m.pos <= 3 ? "q" : ""}"><td><span class="pos">${m.pos}</span></td><td style="font-weight:600"><a href="#/jogador/${m.jogador_id}">${esc(m.nome)}</a></td><td><a href="#/clube/${m.clube_id}">${crestC(B.clubes.get(m.clube_id))}${esc(clubName(B.clubes.get(m.clube_id)))}</a></td><td class="c pts">${m.golos}</td></tr>`).join("")}</tbody></table>` : empty("Ainda sem marcadores.");
   }
-  return { html: hd([["Competições"], [cn(c)]], cn(c), (c.grupo && c.grupo !== cn(c) ? c.grupo + " · " : "") + "Época 2026/27", ["Classificação", "Jornadas", "Calendário", "Marcadores"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${chips}${body}<p class="note">Fonte: hp.fpp.pt · atualizado ${esc(c.atualizado_em ? new Date(c.atualizado_em).toLocaleString("pt-PT") : "")}</p></div></section>`, after };
+  return { html: hd([["Competições"], [cn(c)]], cn(c), (c.grupo && c.grupo !== cn(c) ? c.grupo + " · " : "") + "Época 2026/27", ["Classificação", "Jornadas", "Calendário", "Marcadores"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${chips}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado ${esc(c.atualizado_em ? new Date(c.atualizado_em).toLocaleString("pt-PT") : "")}</p></div></section>`, after };
+}
+
+/* ---------------- linha de jogo ---------------- */
+const EV = {
+  golo: ["⚫️", "Golo"], golo_penalti: ["🥅", "Golo de penálti"], golo_livre: ["🥅", "Golo de livre direto"], autogolo: ["⚫️", "Autogolo"],
+  defesa: ["🧱", "Defesa"], desconto: ["⏰", "Time-out"], penalti_falhado: ["❌", "Penálti falhado"], livre_falhado: ["❌", "Livre direto falhado"],
+  azul: ["🟦", "Cartão azul"], amarelo: ["🟨", "Cartão amarelo"], vermelho: ["🟥", "Cartão vermelho"], falta: ["", "Falta"]
+};
+const isGoal = t => t === "golo" || t === "golo_penalti" || t === "golo_livre" || t === "autogolo";
+const isCard = t => t === "azul" || t === "amarelo" || t === "vermelho";
+const parteN = p => { p = norm(p || ""); if (/prolong/.test(p)) return /2/.test(p) ? 4 : 3; return /2/.test(p) ? 2 : 1; };
+const parteNome = n => ["", "1ª Parte", "2ª Parte", "1º Prolongamento", "2º Prolongamento"][n] || "";
+/* O relógio do hp.fpp.pt conta para trás (tempo que falta na parte). Convertemos para o minuto do jogo,
+   arredondado para cima: 22:04 que faltam na 2ª parte de 25' = 2:56 jogados = 28'. Se numa parte os tempos
+   estiverem a subir, assume-se relógio normal. */
+function minutos(ev, dur) {
+  const porParte = {};
+  ev.forEach(e => (porParte[parteN(e.parte)] = porParte[parteN(e.parte)] || []).push(e));
+  for (const [pn, lista] of Object.entries(porParte)) {
+    const secs = lista.map(e => { const m = /(\d{1,2}):(\d{2})/.exec(e.tempo || ""); return m ? +m[1] * 60 + +m[2] : null; });
+    let sobe = 0, desce = 0; for (let i = 1; i < secs.length; i++) if (secs[i] != null && secs[i - 1] != null) secs[i] > secs[i - 1] ? sobe++ : secs[i] < secs[i - 1] ? desce++ : 0;
+    const n = +pn, len = n >= 3 ? 5 : dur, off = n === 1 ? 0 : n === 2 ? dur : 2 * dur + (n === 4 ? 5 : 0);
+    lista.forEach((e, i) => { const s = secs[i]; if (s == null) { e.min = null; return; } const jogado = sobe > desce ? s : Math.max(0, len * 60 - s); e.min = off + Math.min(len, Math.max(1, Math.ceil(jogado / 60))); e.pn = n; });
+  }
+  return ev;
+}
+function linhaDeJogo(j, ev, filtro) {
+  let gc = 0, gf = 0, fc = 0, ff = 0, pAnt = 0;
+  const final = j.golos_casa != null && j.estado !== "provisorio";
+  const linhas = [];
+  for (const e of ev) {
+    if (e.pn && e.pn !== pAnt) { if (pAnt) linhas.push(`<div class="ldj-sep"><span>${pAnt === 1 ? "Intervalo" : "Fim da " + parteNome(pAnt).toLowerCase()} · ${gc}-${gf}</span></div>`); linhas.push(`<div class="ldj-sep"><span>${parteNome(e.pn)}</span></div>`); pAnt = e.pn; }
+    if (isGoal(e.tipo)) (e.lado === "casa" ? gc++ : gf++);
+    if (e.tipo === "falta") (e.lado === "casa" ? fc++ : ff++);
+    const cat = isGoal(e.tipo) ? "golos" : isCard(e.tipo) ? "cartoes" : e.tipo === "falta" ? "faltas" : "outros";
+    if (filtro === "tudo" ? cat === "faltas" : filtro !== cat) continue;
+    const [ico, lab] = EV[e.tipo] || ["•", e.tipo];
+    const nome = e.jogador ? (e.jogador_id ? `<a href="#/jogador/${e.jogador_id}">${esc(e.jogador)}</a>` : esc(e.jogador)) : "";
+    const extra = isGoal(e.tipo) ? `<span class="ldj-sc">${gc}-${gf}</span>` : e.tipo === "falta" ? `<span class="ldj-f ${(e.lado === "casa" ? fc : ff) >= 10 ? "dez" : ""}">${e.lado === "casa" ? fc : ff}.ª</span>` : "";
+    const card = `<div class="ldj-ev ${cat} t-${e.tipo}"><span class="ldj-ico">${ico || "·"}</span><div><b>${lab}${extra}</b>${nome ? `<small>${nome}</small>` : `<small>${esc(tName(e.lado === "casa" ? j.casa_id : j.fora_id))}</small>`}</div></div>`;
+    linhas.push(`<div class="ldj-row ${e.lado}"><div class="ldj-l">${e.lado === "casa" ? card : ""}</div><div class="ldj-m">${e.min != null ? e.min + "'" : "—"}</div><div class="ldj-r">${e.lado === "fora" ? card : ""}</div></div>`);
+  }
+  if (final && ev.length) linhas.push(`<div class="ldj-sep fim"><span>Final · ${j.golos_casa}-${j.golos_fora}</span></div>`);
+  return linhas.join("") || `<p class="ldj-vazio">Nada para mostrar neste filtro.</p>`;
 }
 
 async function pJogo(id) {
   const j = (await q("jogos", { eq: { id: +id } }))[0];
   if (!j) return { html: hd([], "Jogo não encontrado") };
-  const [ev, pc, pf] = await Promise.all([q("eventos", { eq: { jogo_id: j.id }, order: [["ordem", true]] }), q("plantel", { eq: { equipa_id: j.casa_id } }), q("plantel", { eq: { equipa_id: j.fora_id } })]);
-  const c = compById(j.competicao_id);
-  const goals = ev.filter(e => e.tipo === "golo");
-  const st = [["Golos", j.golos_casa, j.golos_fora], ["Faltas de equipa", j.faltas_casa, j.faltas_fora], ["Cartões azuis", ev.filter(e => e.tipo === "azul" && e.lado === "casa").length, ev.filter(e => e.tipo === "azul" && e.lado === "fora").length], ["Cartões vermelhos", ev.filter(e => e.tipo === "vermelho" && e.lado === "casa").length, ev.filter(e => e.tipo === "vermelho" && e.lado === "fora").length]].filter(s => s[1] != null);
+  const c = compById(j.competicao_id), dur = c?.duracao_parte || 25;
+  const [ev0, pc, pf] = await Promise.all([q("eventos", { eq: { jogo_id: j.id }, order: [["ordem", true]] }), q("plantel", { eq: { equipa_id: j.casa_id } }), q("plantel", { eq: { equipa_id: j.fora_id } })]);
+  const ev = minutos(ev0.map(e => ({ ...e })), dur);
+  const goals = ev.filter(e => isGoal(e.tipo));
+  const n = (t, l) => ev.filter(e => (Array.isArray(t) ? t.includes(e.tipo) : e.tipo === t) && e.lado === l).length;
+  const st = [
+    ["Golos", j.golos_casa, j.golos_fora],
+    ["Golos de penálti / livre direto", n(["golo_penalti", "golo_livre"], "casa"), n(["golo_penalti", "golo_livre"], "fora")],
+    ["Penáltis / livres falhados", n(["penalti_falhado", "livre_falhado"], "casa"), n(["penalti_falhado", "livre_falhado"], "fora")],
+    ["Faltas de equipa", j.faltas_casa ?? n("falta", "casa"), j.faltas_fora ?? n("falta", "fora")],
+    ["Cartões azuis", n("azul", "casa"), n("azul", "fora")],
+    ["Cartões amarelos", n("amarelo", "casa"), n("amarelo", "fora")],
+    ["Cartões vermelhos", n("vermelho", "casa"), n("vermelho", "fora")],
+    ["Time-outs", n("desconto", "casa"), n("desconto", "fora")]
+  ].filter(s => s[1] != null && (s[0] === "Golos" || s[0] === "Faltas de equipa" || +s[1] + +s[2] > 0));
   const big = eid => `<a href="#/clube/${clubOfTeam(eid)?.id || ""}" style="display:block">${crest(eid, 84).replace('class="crest', 'style="margin:0 auto 14px;display:grid" class="crest')}<div class="x">${esc(tName(eid))}</div></a>`;
-  const tl = ev.filter(e => e.tipo !== "falta").map(e => e.tipo === "desconto" ? `<div class="ev"><span class="m">${esc(e.tempo || "")}</span><b>Desconto de tempo</b><small>${esc(tName(e.lado === "casa" ? j.casa_id : j.fora_id))}</small></div>` : `<div class="ev ${e.tipo === "golo" ? "goal" : ""} ${e.tipo}"><span class="m">${esc(e.tempo || "")}</span><b>${{ golo: "Golo", azul: "Cartão azul", amarelo: "Cartão amarelo", vermelho: "Cartão vermelho" }[e.tipo] || esc(e.tipo)}${e.jogador ? " — " + (e.jogador_id ? `<a href="#/jogador/${e.jogador_id}">${esc(e.jogador)}</a>` : esc(e.jogador)) : ""}</b><small>${esc(tName(e.lado === "casa" ? j.casa_id : j.fora_id))}</small></div>`);
-  let parteAnt = null; const tlHTML = ev.filter(e => e.tipo !== "falta").map((e, i) => { const h = e.parte !== parteAnt ? `<div class="parte">${esc(e.parte || "")}</div>` : ""; parteAnt = e.parte; return h + tl[i]; }).join("");
+  const mk = l => goals.filter(g => g.lado === l).map(g => `${esc(g.jogador || "")} ${g.min != null ? g.min + "'" : ""} ${EV[g.tipo][0]}`).join("<br>");
+  const temEv = ev.length > 0;
   return { html: hd([[cn(c), "#/competicao/" + j.competicao_id], ["Jogo"]], `${tName(j.casa_id)} — ${tName(j.fora_id)}`, `${cn(c)} · ${j.jornada_nome || ""} · ${fmtD(j.data)} ${j.hora || ""}`) + `<section style="padding-top:36px"><div class="wrap">
     <div class="score-hero rink">${big(j.casa_id)}<div><div class="lbl" style="color:#8A857C">${j.golos_casa == null ? esc(fmtD(j.data).toUpperCase()) : j.estado === "provisorio" ? "PROVISÓRIO" : "FINAL"}</div><div class="big">${score(j) || esc(j.hora || "vs")}</div>${j.canal_tv || j.tv_url ? `<a class="lbl" style="color:#FFC94D" href="${esc(j.tv_url || "#/onde-ver")}" target="_blank">▶ ${esc(j.canal_tv || "FPP TV")}</a>` : ""}</div>${big(j.fora_id)}</div>
-    ${goals.length ? `<div class="scorers"><div>${goals.filter(g => g.lado === "casa").map(g => esc(g.jogador || "") + " " + esc(g.tempo || "")).join("<br>")}</div><div style="text-align:right">${goals.filter(g => g.lado === "fora").map(g => esc(g.jogador || "") + " " + esc(g.tempo || "")).join("<br>")}</div></div>` : ""}
+    ${goals.length ? `<div class="scorers"><div>${mk("casa")}</div><div style="text-align:right">${mk("fora")}</div></div>` : ""}
+    ${sponsor("jogo")}
+    <div class="ldj-wrap">
+      <div class="ldj-head"><div>${crest(j.casa_id, 34)}<b>${esc(tName(j.casa_id))}</b></div><span class="x">Linha de jogo</span><div><b>${esc(tName(j.fora_id))}</b>${crest(j.fora_id, 34)}</div></div>
+      ${temEv ? `<div class="chips ldj-fil">${[["tudo", "Tudo"], ["golos", "Golos"], ["cartoes", "Cartões"], ["outros", "Time-outs e falhados"], ["faltas", "Faltas"]].map((f, i) => `<button class="chip ${i ? "" : "on"}" data-f="${f[0]}">${f[1]}</button>`).join("")}</div><div class="ldj" id="ldj"></div>
+      <div class="ldj-leg">${["golo", "golo_penalti", "defesa", "desconto", "penalti_falhado", "azul", "amarelo", "vermelho"].map(t => `<span>${EV[t][0]} ${t === "golo_penalti" ? "Golo de penálti / livre direto" : t === "penalti_falhado" ? "Penálti / livre direto falhado" : EV[t][1]}</span>`).join("")}</div>`
+      : empty(j.golos_casa == null ? "O jogo ainda não começou. A linha de jogo aparece aqui durante o jogo." : "Ainda sem registo de acontecimentos deste jogo.")}
+    </div>
     <div class="grid g2" style="margin-top:44px;gap:56px">
-      <div><h3 class="x" style="font-size:30px;margin-bottom:18px">Ao minuto</h3>${ev.length ? `<div class="timeline">${tlHTML}</div>` : empty(j.golos_casa == null ? "O jogo ainda não começou." : "Sem registo de acontecimentos.")}</div>
-      <div>${st.length ? `<h3 class="x" style="font-size:30px;margin-bottom:18px">Estatísticas</h3><div class="stats">${st.map(s => { const x = +s[1] || 0, y = +s[2] || 0, p = x + y ? Math.round(x / (x + y) * 100) : 50; return `<div class="row"><span class="lab">${s[0]}</span><span class="v">${s[1] ?? 0}</span><span class="bar"><i style="width:${p}%"></i></span><span class="v r">${s[2] ?? 0}</span></div>`; }).join("")}</div>` : ""}
-      ${j.arbitros ? `<h3 class="x" style="font-size:30px;margin:30px 0 14px">Arbitragem</h3><p>${esc(j.arbitros)}</p>` : ""}${j.nota ? `<div class="box rink-r" style="margin-top:24px">${esc(j.nota)}</div>` : ""}</div>
-    </div>${(pc.length || pf.length) ? `<div class="grid g2" style="margin-top:44px;gap:56px">${[[j.casa_id, pc], [j.fora_id, pf]].map(([eid, p]) => `<div><h3 class="x" style="font-size:24px;margin-bottom:12px">Plantel · ${esc(tName(eid))}</h3><div id="pl-${eid}" class="mini-squad">A carregar…</div></div>`).join("")}</div>` : ""}
-    <p class="note">Fonte: hp.fpp.pt</p></div></section>`,
-    after: async () => { for (const [eid, p] of [[j.casa_id, pc], [j.fora_id, pf]]) { const el = $("#pl-" + eid); if (!el) continue; const js = await players(p); el.innerHTML = js.map(x => `<a href="#/jogador/${x.id}"><b>${esc(pNum(x) ?? "")}</b> ${esc(pName(x))}</a>`).join("") || "<span style='color:var(--ink-2)'>—</span>"; } } };
+      <div>${st.length ? `<h3 class="x" style="font-size:30px;margin-bottom:18px">Estatísticas</h3><div class="stats">${st.map(s => { const x = +s[1] || 0, y = +s[2] || 0, p = x + y ? Math.round(x / (x + y) * 100) : 50; return `<div class="row"><span class="lab">${s[0]}</span><span class="v">${s[1] ?? 0}</span><span class="bar"><i style="width:${p}%"></i></span><span class="v r">${s[2] ?? 0}</span></div>`; }).join("")}</div>` : ""}</div>
+      <div>${j.arbitros ? `<h3 class="x" style="font-size:30px;margin-bottom:14px">Arbitragem</h3><p>${esc(j.arbitros)}</p>` : ""}${j.nota ? `<div class="box rink-r" style="margin-top:24px">${esc(j.nota)}</div>` : ""}</div>
+    </div>${(pc.length || pf.length) ? `<div class="grid g2" style="margin-top:44px;gap:56px">${[[j.casa_id, pc], [j.fora_id, pf]].map(([eid]) => `<div><h3 class="x" style="font-size:24px;margin-bottom:12px">Plantel · ${esc(tName(eid))}</h3><div id="pl-${eid}" class="mini-squad">A carregar…</div></div>`).join("")}</div>` : ""}
+    <p class="note">Fonte: hp.fpp.pt · minutos calculados a partir do relógio do jogo (partes de ${dur}').</p></div></section>`,
+    after: async () => {
+      if (temEv) { const r = f => { $("#ldj").innerHTML = linhaDeJogo(j, ev, f); document.querySelectorAll(".ldj-fil .chip").forEach(b => b.classList.toggle("on", b.dataset.f === f)); }; document.querySelectorAll(".ldj-fil .chip").forEach(b => b.onclick = () => r(b.dataset.f)); r("tudo"); }
+      for (const [eid, p] of [[j.casa_id, pc], [j.fora_id, pf]]) { const el = $("#pl-" + eid); if (!el) continue; const js = await players(p); el.innerHTML = js.map(x => `<a href="#/jogador/${x.id}"><b>${esc(pNum(x) ?? "")}</b> ${esc(pName(x))}</a>`).join("") || "<span style='color:var(--ink-2)'>—</span>"; }
+    } };
 }
+
+/* ---------------- patrocínios e publicidade ---------------- */
+const SP_LBL = { inicio: "Patrocinado", jogo: "Patrocinado", noticia: "Patrocinado", competicao: "Patrocinado", equipa_jornada: "Equipa da jornada patrocinada por", rodape: "Parceiros" };
+function sponsor(pos) {
+  const l = (B.spons || []).filter(s => s.posicao === pos);
+  if (!l.length) return adSlot(pos);
+  if (pos === "rodape") return `<div class="sp-strip"><span class="lbl">${SP_LBL.rodape}</span>${l.map(s => `<a class="sp-logo" data-sp="${esc(s.id)}" href="${esc(s.link || "#/")}" target="_blank" rel="sponsored noopener" title="${esc(s.texto || s.nome)}">${s.imagem_url ? `<img src="${esc(s.imagem_url)}" alt="${esc(s.texto || s.nome)}">` : esc(s.nome)}</a>`).join("")}</div>`;
+  const s = l[Math.floor(Math.random() * l.length)];
+  if (pos === "equipa_jornada") return `<a class="sp-ej" data-sp="${esc(s.id)}" href="${esc(s.link || "#/")}" target="_blank" rel="sponsored noopener"><span class="lbl">${SP_LBL.equipa_jornada}</span>${s.imagem_url ? `<img src="${esc(s.imagem_url)}" alt="${esc(s.nome)}">` : `<b>${esc(s.texto || s.nome)}</b>`}</a>`;
+  return `<a class="sp-ban" data-sp="${esc(s.id)}" href="${esc(s.link || "#/")}" target="_blank" rel="sponsored noopener"><span class="lbl">${SP_LBL[pos] || "Patrocinado"}</span>${s.imagem_url ? `<img src="${esc(s.imagem_url)}" alt="${esc(s.texto || s.nome)}">` : `<b>${esc(s.texto || s.nome)}</b>`}</a>`;
+}
+function adSlot(pos) {
+  if (!CFG.ADSENSE_CLIENT || !["inicio", "jogo", "noticia", "competicao"].includes(pos)) return "";
+  return `<div class="ad-slot"><span class="lbl">Publicidade</span><ins class="adsbygoogle" style="display:block" data-ad-client="${esc(CFG.ADSENSE_CLIENT)}" ${CFG.ADSENSE_SLOT ? `data-ad-slot="${esc(CFG.ADSENSE_SLOT)}"` : ""} data-ad-format="auto" data-full-width-responsive="true"></ins></div>`;
+}
+function afterSponsors(root) {
+  const ids = [...root.querySelectorAll("[data-sp]")].map(a => a.dataset.sp).filter((v, i, a) => a.indexOf(v) === i);
+  if (LIVE && ids.length) sb.rpc("registar_patrocinio", { ids, tipo: "vista" }).then(() => { }, () => { });
+  root.querySelectorAll("[data-sp]").forEach(a => a.addEventListener("click", () => { if (LIVE) sb.rpc("registar_patrocinio", { ids: [a.dataset.sp], tipo: "clique" }).then(() => { }, () => { }); }));
+  root.querySelectorAll("ins.adsbygoogle:not([data-adsbygoogle-status])").forEach(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) { } });
+}
+function loadAdsense() {
+  if (!CFG.ADSENSE_CLIENT || document.getElementById("adsjs")) return;
+  const s = document.createElement("script"); s.id = "adsjs"; s.async = true; s.crossOrigin = "anonymous";
+  s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=" + encodeURIComponent(CFG.ADSENSE_CLIENT);
+  document.head.appendChild(s);
+}
+
+/* ---------------- privacidade ---------------- */
+const PRIVACIDADE = `**Quem somos.** O Hóquei em Português é um projeto independente sobre hóquei em patins. Os resultados, classificações e plantéis vêm do site público da Federação de Patinagem de Portugal (hp.fpp.pt).
+
+**Que dados recolhemos.** Só os que nos dás: o email, se subscreveres a newsletter, e o nome, email e mensagem, se usares o formulário de contacto. Não pedimos registo para ler o site.
+
+**Para que os usamos.** O email da newsletter serve só para enviar a newsletter. As mensagens servem para te respondermos. Não vendemos nem cedemos estes dados a ninguém.
+
+**Onde ficam guardados.** Numa base de dados na Supabase (servidores na União Europeia ou com garantias equivalentes). O site está alojado na Netlify.
+
+**Cookies e publicidade.** O site guarda no teu navegador apenas preferências como o modo noite. Se mostrarmos publicidade da Google (AdSense), a Google pode usar cookies para mostrar e medir anúncios, só depois de dares consentimento na mensagem que aparece ao entrar. Podes mudar a tua escolha a qualquer momento em “Gerir cookies”, no fundo da página. Mais informação: [policies.google.com/technologies/ads](https://policies.google.com/technologies/ads).
+
+**Patrocinadores.** Os banners de patrocinadores são imagens nossas; contamos apenas quantas vezes são vistos e clicados, sem identificar quem.
+
+**Os teus direitos (RGPD).** Podes pedir para ver, corrigir ou apagar os teus dados, ou cancelar a newsletter a qualquer momento, através do formulário de contacto. Também podes apresentar queixa à CNPD (cnpd.pt).`;
+async function pPrivacidade() {
+  const t = B.defs.privacidade?.texto || PRIVACIDADE;
+  return { html: hd([["Privacidade"]], "Privacidade e cookies") + `<section style="padding-top:36px"><div class="wrap"><div class="article">${para(t)}<p class="note">Última atualização: ${esc(B.defs.privacidade?.atualizado || "novembro de 2026")}</p></div></div></section>` };
+}
+function gerirCookies() {
+  try { if (window.googlefc && window.googlefc.showRevocationMessage) { window.googlefc.showRevocationMessage(); return; } } catch (e) { }
+  go("/privacidade");
+}
+
 async function players(plantel) {
   if (!plantel.length) return [];
   const js = await q("jogadores", { in: { id: plantel.map(p => p.jogador_id) }, eq: { visivel: true } });
@@ -305,7 +429,7 @@ async function pJogador(id) {
   const eq = pl.map(x => B.equipas.get(x.equipa_id)).filter(Boolean);
   const c = B.clubes.get(eq[0]?.clube_id);
   const idade = p.data_nascimento ? Math.floor((Date.now() - new Date(p.data_nascimento)) / 3.15576e10) : null;
-  return { html: hd([["Clubes", "#/clubes"], ...(c ? [[clubName(c), "#/clube/" + c.id]] : []), [pName(p)]], pName(p), [p.posicao, c && clubName(c)].filter(Boolean).join(" · ")) + `<section style="padding-top:36px"><div class="wrap grid g2" style="grid-template-columns:320px 1fr;gap:48px">
+  return { html: hd([["Clubes", "#/clubes"], ...(c ? [[clubName(c), "#/clube/" + c.id]] : []), [pName(p)]], pName(p), [p.posicao, c && clubName(c)].filter(Boolean).join(" · ")) + `<section style="padding-top:36px"><div class="wrap grid g2 jog-grid">
     <div>${pFoto(p) ? img(pFoto(p), pName(p), "rink").replace('class="imgbox', 'style="aspect-ratio:3/4" class="imgbox') : `<div class="imgbox err rink" style="aspect-ratio:3/4"></div>`}</div>
     <div><div class="grid g3" style="margin-bottom:28px">${[["Número", pNum(p) ?? "—"], ["Posição", p.posicao || "—"], ["Golos", mk.reduce((s, m) => s + (m.golos || 0), 0) || pl.reduce((s, x) => s + (x.golos || 0), 0)], ...(p.nacionalidade ? [["Nacionalidade", p.nacionalidade]] : []), ...(idade ? [["Idade", idade + " anos"]] : [])].map(s => `<div class="box rink-r"><span class="lbl">${s[0]}</span><div class="x" style="font-size:30px;margin-top:8px;color:var(--red)">${esc(s[1])}</div></div>`).join("")}</div>
     ${p.bio ? `<div class="article">${para(p.bio)}</div>` : ""}${eq.length ? `<h3 class="x" style="font-size:24px;margin:20px 0 10px">Equipas</h3>${eq.map(e => `<a class="doc" href="#/clube/${e.clube_id}"><span class="d">${esc(cn(compById(e.competicao_id)))}</span><b>${esc(tName(e.id))}</b><span></span></a>`).join("")}` : ""}</div></div></section>` };
@@ -325,7 +449,7 @@ async function pEDJ() {
   const ej = await q("equipa_jornada", { order: [["criado_em", false]], limit: 10 });
   if (!ej.length) return { html: hd([["Equipa da Jornada"]], "Equipa da Jornada") + `<section><div class="wrap">${empty("Ainda não foi publicada nenhuma equipa da jornada.")}</div></section>` };
   const e = ej[0];
-  return { html: hd([["Equipa da Jornada"]], e.titulo || "Equipa da Jornada", `${cn(compById(e.competicao_id))}${e.jornada ? " · Jornada " + e.jornada : ""}`) + `<section style="padding-top:36px"><div class="wrap">${rinkTeam(e)}<div class="grid g3" style="margin-top:28px">${(e.jogadores || []).map(p => `<div class="box rink-r"><span class="lbl">${esc(p.posicao || "")}</span><h3 style="margin-top:6px">${esc(p.nome)}</h3><p style="color:var(--ink-2)">${esc(clubName(B.clubes.get(+p.clube_id)))}${p.nota ? " · " + esc(p.nota) : ""}</p></div>`).join("")}${e.treinador ? `<div class="box rink-r" style="background:var(--red);color:#fff;border-color:var(--red)"><span class="lbl" style="color:#fff;opacity:.7">Treinador da jornada</span><h3 style="margin-top:6px">${esc(e.treinador)}</h3><p style="opacity:.85">${esc(clubName(B.clubes.get(+e.treinador_clube)))}</p></div>` : ""}</div>
+  return { html: hd([["Equipa da Jornada"]], e.titulo || "Equipa da Jornada", `${cn(compById(e.competicao_id))}${e.jornada ? " · Jornada " + e.jornada : ""}`) + `<section style="padding-top:36px"><div class="wrap">${rinkTeam(e)}${sponsor("equipa_jornada")}<div class="grid g3" style="margin-top:28px">${(e.jogadores || []).map(p => `<div class="box rink-r"><span class="lbl">${esc(p.posicao || "")}</span><h3 style="margin-top:6px">${esc(p.nome)}</h3><p style="color:var(--ink-2)">${esc(clubName(B.clubes.get(+p.clube_id)))}${p.nota ? " · " + esc(p.nota) : ""}</p></div>`).join("")}${e.treinador ? `<div class="box rink-r" style="background:var(--red);color:#fff;border-color:var(--red)"><span class="lbl" style="color:#fff;opacity:.7">Treinador da jornada</span><h3 style="margin-top:6px">${esc(e.treinador)}</h3><p style="opacity:.85">${esc(clubName(B.clubes.get(+e.treinador_clube)))}</p></div>` : ""}</div>
     ${ej.length > 1 ? `<div style="margin-top:44px">${sh("+", "Anteriores")}${ej.slice(1).map(x => `<div class="doc"><span class="d">${esc(fmtD((x.criado_em || "").slice(0, 10)))}</span><b>${esc(x.titulo || "Jornada " + x.jornada)}</b><span>${(x.jogadores || []).map(p => esc(p.nome)).join(", ")}</span></div>`).join("")}</div>` : ""}</div></section>` };
 }
 async function pSelecoes() {
@@ -346,16 +470,16 @@ async function go(path) {
   cur = path || "/";
   try { if (location.hash !== "#" + cur) history.replaceState(null, "", "#" + cur); } catch (e) { }
   const p = cur.replace(/^\//, "").split("/").map(decodeURIComponent);
-  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre };
+  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade };
   const top = { competicao: "comp", jogo: "comp", noticias: "news", noticia: "news", clubes: "clubs", clube: "clubs", jogador: "clubs", mercado: "mkt", "onde-ver": "tv" }[p[0]] || "";
   closeMenu();
   $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px"><span class="lbl">A carregar…</span></div>`;
   try {
     const r = await (R[p[0]] || pHome)(p[1], p[2]);
     if (cur !== (path || "/")) return; // utilizador já navegou para outra página
-    $("#app").innerHTML = r.html; r.after && r.after();
+    $("#app").innerHTML = r.html; r.after && r.after(); afterSponsors($("#app"));
   } catch (e) { console.error(e); $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px">${empty("Ocorreu um erro a carregar esta página.")}</div>`; }
-  document.querySelectorAll("#quick a").forEach(a => a.classList.toggle("on", a.dataset.k === top));
+  document.querySelectorAll("#quick a, .tabbar a").forEach(a => a.classList.toggle("on", a.dataset.k === (top || (p[0] === "" ? "home" : ""))));
   window.scrollTo(0, 0);
 }
 document.addEventListener("click", e => { const a = e.target.closest("a"); if (!a) return; const h = a.getAttribute("href"); if (h && h.startsWith("#/")) { e.preventDefault(); go(h.slice(1)); } });
@@ -368,12 +492,13 @@ function setTheme(t) { document.documentElement.dataset.theme = t; $("#themeBtn"
   let th = "light"; try { th = localStorage.getItem("hp-theme") || "light"; } catch (e) { }
   setTheme(th);
   $("#themeBtn").onclick = () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-  $("#menuBtn").onclick = openMenu; $("#menuClose").onclick = closeMenu;
+  $("#menuBtn").onclick = openMenu; $("#menuClose").onclick = closeMenu; $("#tabMenu").onclick = openMenu;
   let t; $("#q").oninput = e => { clearTimeout(t); t = setTimeout(() => search(e.target.value), 250); };
-  if (CFG.LOGO) { const l = $("#logoImg"); l.src = CFG.LOGO; }
   if (!LIVE) $("#demo").style.display = "block";
   await loadBase();
-  buildMenu(); board();
+  buildMenu(); board(); loadAdsense();
+  $("#spBar").innerHTML = sponsor("rodape"); afterSponsors($("#spBar"));
+  $("#gerirCookies").onclick = e => { e.preventDefault(); gerirCookies(); };
   go(location.hash.slice(1) || "/");
   // atualiza o placar e a página do jogo de 2 em 2 minutos (o robô corre de 10 em 10)
   setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "")) go(cur); }, 120000);

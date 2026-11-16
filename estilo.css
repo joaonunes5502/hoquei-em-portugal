@@ -17,7 +17,7 @@ img{display:block;max-width:100%}
 /* header */
 header{position:sticky;top:0;z-index:40;background:var(--paper);border-bottom:2px solid var(--ink)}
 header .wrap{display:flex;align-items:center;height:76px;gap:28px}
-.logo img{height:48px;width:auto}
+.logo img{height:58px;width:auto}
 .logo .fb{display:none}
 
 .quick{display:flex;gap:4px;margin-left:auto}
@@ -331,3 +331,138 @@ footer .bot{display:flex;justify-content:space-between;font-family:"IBM Plex Mon
 .corpo p{font-size:19px;margin-bottom:16px}
 #demo{display:none;background:#FFC94D;color:#121212;text-align:center;font-family:"IBM Plex Mono";font-size:12px;padding:6px 10px;letter-spacing:.04em}
 .board{min-height:0}
+
+/* logótipo: dia / noite */
+.logo img{height:58px;width:auto}
+.logo .lg-noite{display:none}
+[data-theme=dark] .logo .lg-dia{display:none}
+[data-theme=dark] .logo .lg-noite{display:block}
+@media(max-width:720px){.logo img{height:38px}}
+
+/* ---------- linha de jogo ---------- */
+.ldj-wrap{margin-top:40px;background:var(--card);border:1.5px solid var(--line);border-radius:0 48px 0 48px;padding:26px 26px 20px}
+.ldj-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:14px;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.ldj-head>div{display:flex;align-items:center;gap:10px;font-size:17px}.ldj-head>div:last-child{justify-content:flex-end}
+.ldj-head .x{font-size:20px;color:var(--red)}
+.ldj-fil{margin:16px 0 6px;justify-content:center}
+.ldj{position:relative;padding:8px 0}
+.ldj::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--line);transform:translateX(-1px)}
+.ldj-row{display:grid;grid-template-columns:1fr 64px 1fr;align-items:center;position:relative;padding:5px 0}
+.ldj-m{justify-self:center;z-index:1;min-width:48px;text-align:center;font-family:"IBM Plex Mono";font-weight:600;font-size:14px;background:var(--paper);border:1.5px solid var(--ink);border-radius:999px;padding:3px 8px}
+.ldj-l{display:flex;justify-content:flex-end;padding-right:12px}.ldj-r{padding-left:12px}
+.ldj-ev{display:flex;align-items:center;gap:12px;background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:9px 14px;max-width:340px;transition:.15s}
+.ldj-l .ldj-ev{flex-direction:row-reverse;text-align:right}
+.ldj-ev:hover{border-color:var(--ink)}
+.ldj-ev b{display:flex;align-items:center;gap:8px;font-size:15px}.ldj-l .ldj-ev b{justify-content:flex-end}
+.ldj-ev small{display:block;color:var(--ink-2);font-size:13px}.ldj-ev small a:hover{color:var(--red);text-decoration:underline}
+.ldj-ico{font-size:22px;line-height:1;width:28px;text-align:center;flex-shrink:0}
+.ldj-ev.golos{background:var(--board);border-color:var(--board);color:#F2EEE6}.ldj-ev.golos small{color:#B9B3A8}
+.ldj-ev.golos .ldj-ico{filter:drop-shadow(0 0 1px rgba(255,255,255,.9))}
+.ldj-sc{font-family:"IBM Plex Mono";font-size:13px;background:#FFC94D;color:#121212;border-radius:6px;padding:1px 7px}
+.ldj-ev.faltas{padding:5px 12px;border-style:dashed}.ldj-ev.faltas .ldj-ico{display:none}
+.ldj-f{font-family:"IBM Plex Mono";font-size:12px;border:1.5px solid var(--line);border-radius:6px;padding:0 6px}.ldj-f.dez{border-color:var(--red);color:var(--red)}
+.ldj-sep{display:flex;justify-content:center;margin:14px 0;position:relative;z-index:1}
+.ldj-sep span{background:var(--red);color:#fff;font-family:"IBM Plex Mono";font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:5px 14px;border-radius:999px}
+.ldj-sep.fim span{background:var(--board);color:#FFC94D}
+.ldj-vazio{text-align:center;color:var(--ink-2);padding:20px}
+.ldj-leg{display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center;border-top:1px solid var(--line);margin-top:10px;padding-top:14px;font-size:13px;color:var(--ink-2)}
+@media(max-width:720px){.ldj-wrap{padding:18px 12px;border-radius:0 28px 0 28px}.ldj-row{grid-template-columns:1fr 46px 1fr}.ldj-m{min-width:40px;font-size:12px;padding:2px 4px}.ldj-ev{padding:7px 9px;gap:7px}.ldj-ev b{font-size:12px;flex-wrap:wrap}.ldj-ev small{font-size:11px}.ldj-ico{font-size:17px;width:20px}.ldj-l{padding-right:6px}.ldj-r{padding-left:6px}.ldj-head>div b{display:none}.ldj-head .x{font-size:16px}}
+/* ---------- patrocínios e publicidade ---------- */
+.sp-ban,.ad-slot{display:block;position:relative;margin:26px 0;border:1.5px solid var(--line);background:var(--card);border-radius:0 30px 0 30px;overflow:hidden;text-align:center}
+.sp-ban img{display:block;width:100%;max-height:160px;object-fit:cover}
+.sp-ban b{display:block;padding:30px 20px;font-stretch:110%;font-size:20px}
+.sp-ban .lbl,.ad-slot .lbl,.sp-ej .lbl{position:absolute;left:10px;top:6px;font-size:10px;background:var(--card);padding:1px 6px;border-radius:4px;z-index:1}
+.sp-ban:hover{border-color:var(--ink)}
+.ad-slot{padding:22px 10px 10px;min-height:110px}
+.sp-ej{display:flex;align-items:center;justify-content:center;gap:14px;position:relative;margin-top:12px;padding:16px 14px 12px;border:1.5px dashed var(--line);border-radius:0 0 30px 30px}
+.sp-ej .lbl{position:static;background:none;padding:0}.sp-ej img{max-height:46px;max-width:180px;object-fit:contain}
+.sp-strip{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:16px 40px;padding:28px 0 6px;border-top:2px solid var(--ink);margin-top:40px}
+.sp-strip .lbl{width:100%;text-align:center}
+.sp-logo{display:grid;place-items:center;height:58px;min-width:110px;font-weight:800;font-stretch:110%;color:var(--ink-2)}
+.sp-logo img{max-height:52px;max-width:160px;object-fit:contain;filter:grayscale(1);opacity:.8;transition:.2s}.sp-logo:hover img{filter:none;opacity:1}
+@media(max-width:1000px){header .wrap>#themeBtn{margin-left:auto}}
+
+/* ---------- seletor de competições ---------- */
+.cpick{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:22px}
+.cp-chips{margin:0}.cp-chips .chip{display:inline-flex;align-items:center}
+.cp-sel{width:auto;max-width:260px;height:36px;padding:0 14px;font-weight:600;font-size:14px;border-width:1.5px;cursor:pointer}
+.jog-grid{grid-template-columns:320px 1fr;gap:48px}
+/* ---------- barra de navegação do telemóvel ---------- */
+.tabbar{display:none}
+@media(max-width:720px){
+  body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--paper);border-top:2px solid var(--ink);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .tabbar a,.tabbar button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700;color:var(--ink-2);padding:4px 0;border-radius:12px}
+  .tabbar svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .tabbar a.on{color:var(--red)}.tabbar a.on svg{stroke-width:2.5}
+  header .hbtn.red{display:none}
+  header .wrap{height:62px}
+  .logo img{height:40px}
+  /* espaços e títulos */
+  section{padding:40px 0}
+  .wrap{padding:0 16px}
+  .phd{padding-top:26px}.phd h1{font-size:34px}.phd p{font-size:15px}.phd .crumbs{font-size:11px;margin-bottom:8px}
+  .tabs{margin-top:18px;gap:6px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:12px;-webkit-overflow-scrolling:touch}
+  .tabs a.tb,.tabs button{height:34px;padding:0 13px;font-size:13px;flex-shrink:0}
+  html,body{overflow-x:hidden}
+  .sh{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;margin-bottom:18px}.sh h2{font-size:26px;overflow-wrap:anywhere}.sh .idx{padding-bottom:6px}
+  .sh .more{font-size:13px;padding-bottom:4px}.rail-ctrl .hbtn.circ{display:none}.rail-ctrl .hbtn{height:36px;padding:0 12px;font-size:13px}
+  .grid,.g2,.g3,.jog-grid,.wrap.grid{grid-template-columns:1fr!important;gap:32px!important}
+  .g4{grid-template-columns:1fr 1fr!important;gap:14px!important}
+  .chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}.chip{flex-shrink:0}
+  .cpick{flex-direction:column;align-items:stretch;gap:8px}.cp-sel{max-width:none;width:100%}
+  /* destaque */
+  .hero{padding:22px 0 30px}.hero h1{font-size:32px}.hero p.lead{font-size:16px;margin:14px 0 18px}
+  .hero .ph{aspect-ratio:16/10;margin-top:18px}.hero .ph .num{left:0;bottom:-14px;font-size:11px}
+  .hero .meta{margin-bottom:14px}
+  .rail{grid-auto-columns:72%;gap:14px}.nc h3{font-size:17px}
+  /* tabelas */
+  .hm{display:none}
+  table{font-size:14px}td,th{padding:9px 6px}.pos{width:26px;height:26px;font-size:13px}
+  .ctab td:nth-child(2){white-space:normal!important}
+  .crest{margin-right:6px}
+  /* jogos */
+  .match{grid-template-columns:1fr 62px 1fr;gap:8px;padding:12px 0}
+  .match .a,.match .b{font-size:13px}.match .s{font-size:17px}.match .s.h{font-size:13px}
+  .match .i{font-size:10px}
+  .mini .r{grid-template-columns:1fr 50px 1fr;font-size:13px}
+  .score-hero{grid-template-columns:1fr auto 1fr;padding:22px 10px;gap:6px;border-radius:0 34px 0 34px}
+  .score-hero .crest{width:52px!important;height:52px!important;font-size:16px!important}
+  .score-hero .x{font-size:15px}.score-hero .big{font-size:46px}
+  .scorers{padding:0 16px 18px;font-size:11px;gap:10px}
+  /* equipa da jornada */
+  .rinkbox{border-radius:0 40px 0 40px;border-width:4px}
+  .player{width:76px}.player .shirt{width:30px;height:30px;font-size:12px;border-width:2px;margin-bottom:3px}
+  .player b{font-size:10px;line-height:1.15}.player small{display:none}
+  /* clubes: lista compacta */
+  .clubgrid{grid-template-columns:1fr!important;gap:8px}
+  .club{flex-direction:row;align-items:center;gap:14px;padding:12px 14px}
+  .club .cr{width:42px!important;height:42px!important;font-size:14px!important}.club h3{font-size:16px}
+  .clubhero{gap:14px}.clubhero .cr{width:70px!important;height:70px!important;font-size:22px!important;border-radius:0 22px 0 22px}
+  .squad{grid-template-columns:1fr!important;gap:8px}.pl{padding:10px 12px}
+  /* mercado */
+  .tr{grid-template-columns:1fr auto;grid-template-areas:"p k" "c c";row-gap:6px;padding:12px 0}
+  .tr .p{grid-area:p}.tr .k{grid-area:k}.tr .from,.tr .arr{display:none}.tr>a,.tr>span:nth-child(4){grid-area:c;font-size:13px;color:var(--ink-2)}
+  /* onde ver */
+  .tv{grid-template-columns:70px 1fr;gap:10px}.tv .when b{font-size:16px}
+  /* docs/marcadores */
+  .doc{grid-template-columns:auto 1fr auto!important;gap:12px}.doc .c{justify-self:end}
+  /* caixas */
+  .box{padding:18px}.box h3{font-size:20px}
+  .compcards{grid-template-columns:1fr 1fr!important;gap:10px}.cc{min-height:110px;padding:16px}.cc .x{font-size:17px}.cc .ar{right:12px;top:12px;font-size:16px}
+  .appband .wrap,.newsband .wrap{padding-top:40px;padding-bottom:40px}
+  .ig{grid-template-columns:repeat(3,1fr)}
+  /* menu */
+  .menu .top{height:62px}.menu .search input{font-size:18px}
+  .menu .cols{padding:20px 0 90px;gap:24px}.menu .big a{font-size:24px}
+  /* rodapé simples */
+  footer{margin-top:20px}footer .wrap{padding-top:34px}
+  footer .cols{grid-template-columns:1fr 1fr!important;gap:22px}
+  footer .cols>div:first-child{grid-column:1/-1}footer .cols>div:first-child p{display:none}
+  footer .cols>div:nth-child(3){display:none}
+  footer .word{font-size:22vw;margin-top:20px}
+  footer .bot{font-size:11px;flex-direction:column}
+  .sp-strip{gap:10px 24px;margin-top:20px}.sp-logo{min-width:80px;height:44px}
+  #demo{font-size:10px}
+  .jog-grid>div:first-child{max-width:220px}
+}

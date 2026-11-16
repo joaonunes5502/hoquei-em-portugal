@@ -13,7 +13,7 @@
 <body>
 <div id="demo">MODO DEMONSTRAÇÃO — preenche o config.js com os dados do Supabase para ver os dados reais</div>
 <header><div class="wrap">
-  <a href="#/" class="logo"><img id="logoImg" alt="Hóquei em Português" onload="this.nextElementSibling.style.display='none'" onerror="this.remove()"><span class="wm"><b>Hóquei</b><span>em Português</span></span></a>
+  <a href="#/" class="logo"><img class="lg-dia" src="logo-dia.png" alt="Hóquei em Português"><img class="lg-noite" src="logo-noite.png" alt="Hóquei em Português"></a>
   <nav class="quick" id="quick">
     <a href="#/competicao" data-k="comp">Resultados</a><a href="#/noticias" data-k="news">Notícias</a><a href="#/clubes" data-k="clubs">Clubes</a><a href="#/mercado" data-k="mkt">Mercado</a><a href="#/onde-ver" data-k="tv">Onde ver</a>
   </nav>
@@ -31,6 +31,8 @@
 <div class="board"><div class="wrap" id="board"></div></div>
 <main id="app"></main>
 
+<div class="wrap" id="spBar"></div>
+
 <footer><div class="wrap">
   <div class="cols">
     <div><div class="x" style="font-size:26px;line-height:1">Hóquei<br>em Português</div><p style="margin-top:14px">O hóquei em patins português, jornada a jornada. Resultados, notícias, mercado e tudo o que acontece dentro e fora do ringue.</p></div>
@@ -39,8 +41,16 @@
     <div><h5>Segue-nos</h5><a href="https://www.instagram.com/hoqueiemportugues/" target="_blank">Instagram · @hoqueiemportugues ↗</a><a href="#/sobre">Envia a tua notícia</a><a href="#/sobre">Parcerias e publicidade</a></div>
   </div>
   <div class="word">HÓQUEI</div>
-  <div class="bot"><span>© Hóquei em Português</span><span>Resultados e classificações: hp.fpp.pt</span></div>
+  <div class="bot"><span>© Hóquei em Português · <a href="#/privacidade" style="display:inline">Privacidade</a> · <a href="#" id="gerirCookies" style="display:inline">Gerir cookies</a></span><span>Resultados e classificações: hp.fpp.pt</span></div>
 </div></footer>
+
+<nav class="tabbar" aria-label="Navegação">
+  <a href="#/" data-k="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1z"/></svg>Início</a>
+  <a href="#/competicao" data-k="comp"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M12 5v14M3 12h4M17 12h4"/></svg>Jogos</a>
+  <a href="#/noticias" data-k="news"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Notícias</a>
+  <a href="#/clubes" data-k="clubs"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg>Clubes</a>
+  <button id="tabMenu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Mais</button>
+</nav>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>

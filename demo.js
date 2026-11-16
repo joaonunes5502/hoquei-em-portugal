@@ -14,9 +14,9 @@ window.HP_DEMO = (function () {
   const eqId = { 123: 1182, 129: 1184, 127: 1178, 125: 1186, 1329: 1159, 122: 1187, 124: 1188, 128: 1167, 116: 1172, 1333: 1181, 951: 1185, 126: 1189, 120: 1190, 155: 1183 };
   const equipas = clubes.map(c => ({ id: eqId[c.id], competicao_id: 493, clube_id: c.id, nome: c.nome }));
   const competicoes = [
-    { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1 },
-    { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", nome_curto: null, ativa: true, principal: false, ordem: 2 },
-    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3 }
+    { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1, menu: "principal" },
+    { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
+    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "mais" }
   ];
   // jornadas 1 e 2 reais; o resto é calendário de exemplo
   const R = [
@@ -60,11 +60,11 @@ window.HP_DEMO = (function () {
   const marcadores = J.filter(p => p._g > 0).sort((a, b) => b._g - a._g).map((p, i) => ({ competicao_id: 493, jogador_id: p.id, pos: i + 1, nome: p.nome, clube_id: equipas.find(e => e.id === p._eq).clube_id, golos: p._g }));
   const tecnicos = [{ equipa_id: 1182, nome: "Hugo Azevedo", funcao: "Treinador" }, { equipa_id: 1182, nome: "Tiago Sousa", funcao: "Treinador Adjunto" }, { equipa_id: 1184, nome: "André Torres", funcao: "Treinador" }];
   const eventos = [
-    ["1ª Parte", "00:12", "golo", "fora", "Rafa Almeida", 166353], ["1ª Parte", "08:40", "golo", "casa", "Abreu", 161551], ["1ª Parte", "14:02", "azul", "casa", "Abreu", 161551],
-    ["1ª Parte", "19:30", "golo", "casa", "Miccoli", 161549], ["1ª Parte", "22:10", "golo", "fora", "Tomás Pereira", 164820],
-    ["2ª Parte", "3:25", "golo", "casa", "Joca Guimarães", 161550], ["2ª Parte", "4:17", "azul", "fora", "Futuro", 166354], ["2ª Parte", "5:01", "golo", "casa", "Zé Miguel", 161548],
-    ["2ª Parte", "13:05", "golo", "casa", "Joca Guimarães", 161550], ["2ª Parte", "22:04", "golo", "fora", "Rafa Almeida", 166353]
-  ].map((e, i) => ({ id: i + 1, jogo_id: 18727, ordem: i, parte: e[0], tempo: e[1], tipo: e[2], lado: e[3], jogador: e[4], jogador_id: e[5] }));
+    ["1ª Parte", "24:48", "golo", "fora", "Rafa Almeida", 166353], ["1ª Parte", "20:10", "desconto", "casa", null, null], ["1ª Parte", "16:20", "golo", "casa", "Abreu", 161551], ["1ª Parte", "12:58", "azul", "casa", "Abreu", 161551],
+    ["1ª Parte", "12:58", "falta", "casa", null, null], ["1ª Parte", "8:02", "penalti_falhado", "fora", "Tomás Pereira", 164820], ["1ª Parte", "5:30", "golo_penalti", "casa", "Miccoli", 161549], ["1ª Parte", "2:50", "golo", "fora", "Tomás Pereira", 164820],
+    ["2ª Parte", "21:35", "golo", "casa", "Joca Guimarães", 161550], ["2ª Parte", "20:43", "azul", "fora", "Futuro", 166354], ["2ª Parte", "19:59", "golo_livre", "casa", "Zé Miguel", 161548], ["2ª Parte", "16:00", "amarelo", "casa", "Franco Serfaty", 161645],
+    ["2ª Parte", "11:55", "golo", "casa", "Joca Guimarães", 161550], ["2ª Parte", "6:20", "livre_falhado", "casa", "Cancela", 161547], ["2ª Parte", "4:00", "desconto", "fora", null, null], ["2ª Parte", "2:56", "golo", "fora", "Rafa Almeida", 166353]
+].map((e, i) => ({ id: i + 1, jogo_id: 18727, ordem: i, parte: e[0], tempo: e[1], tipo: e[2], lado: e[3], jogador: e[4], jogador_id: e[5] }));
   const U = "https://fpp.pt/wp-content/uploads/";
   const noticias = [
     ["Joca Guimarães bisa e a Juventude Pacense entra a ganhar no Placard", "Vitória por 5-3 frente à AJ Viana na estreia, num jogo decidido na segunda parte.", "202627-CPHP-News-1-JJ-Fecho-20261111.png", 493, true, "2026-11-08T20:00:00Z"],
@@ -83,5 +83,11 @@ window.HP_DEMO = (function () {
       { posicao: "Defesa", nome: "Gonçalo Neto", clube_id: 120 }, { posicao: "Médio", nome: "Rafa Almeida", clube_id: 129, numero: 25 }, { posicao: "Avançado", nome: "Miguel Rocha", clube_id: 951 }] }];
   const definicoes = [{ chave: "ultima_atualizacao", valor: { quando: new Date().toISOString(), modo: "demo" } },
     { chave: "sobre", valor: { texto: "O Hóquei em Português é a casa de quem vive o hóquei em patins: resultados, histórias e o dia a dia dos clubes, do Placard às divisões regionais." } }];
-  return { competicoes, clubes, equipas, classificacao, jogos, eventos, jogadores: J.map(({ _eq, _g, ...p }) => p), plantel, tecnicos, marcadores, noticias, mercado, equipa_jornada, definicoes, newsletter: [], mensagens: [] };
+  const patrocinios = [
+    { id: "sp1", nome: "Exemplo", imagem_url: null, link: "#/sobre", texto: "O teu banner aqui · Anuncia no Hóquei em Português", posicao: "inicio", ativo: true, ordem: 1 },
+    { id: "sp2", nome: "Exemplo", imagem_url: null, link: "#/sobre", texto: "O teu banner aqui", posicao: "jogo", ativo: true, ordem: 1 },
+    { id: "sp3", nome: "Parceiro A", imagem_url: null, link: "#/sobre", texto: "Parceiro A", posicao: "rodape", ativo: true, ordem: 1 },
+    { id: "sp4", nome: "Parceiro B", imagem_url: null, link: "#/sobre", texto: "Parceiro B", posicao: "rodape", ativo: true, ordem: 2 },
+    { id: "sp5", nome: "Exemplo", imagem_url: null, link: "#/sobre", texto: "A tua marca", posicao: "equipa_jornada", ativo: true, ordem: 1 }];
+  return { patrocinios, competicoes, clubes, equipas, classificacao, jogos, eventos, jogadores: J.map(({ _eq, _g, ...p }) => p), plantel, tecnicos, marcadores, noticias, mercado, equipa_jornada, definicoes, newsletter: [], mensagens: [] };
 })();
