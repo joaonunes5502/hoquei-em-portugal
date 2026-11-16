@@ -130,7 +130,7 @@ function buildMenu() {
   $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(cn(c))}</a>`).join("")}</div>
   <div>${sm("Mais competições", compsMais().map(c => [cn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
-  <div>${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
+  <div>${sm("A tua app", [["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
   $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(cn(c))}</a>`).join("");
 }
 function openMenu() { $("#menu").classList.add("open"); document.body.style.overflow = "hidden"; setTimeout(() => $("#q").focus(), 50); }
@@ -317,6 +317,7 @@ async function pJogo(id) {
   return { html: hd([[cn(c), "#/competicao/" + j.competicao_id], ["Jogo"]], `${tName(j.casa_id)} — ${tName(j.fora_id)}`, `${cn(c)} · ${j.jornada_nome || ""} · ${fmtD(j.data)} ${j.hora || ""}`) + `<section style="padding-top:36px"><div class="wrap">
     <div class="score-hero rink">${big(j.casa_id)}<div><div class="lbl" style="color:#8A857C">${j.golos_casa == null ? esc(fmtD(j.data).toUpperCase()) : j.estado === "provisorio" ? "PROVISÓRIO" : "FINAL"}</div><div class="big">${score(j) || esc(j.hora || "vs")}</div>${j.canal_tv || j.tv_url ? `<a class="lbl" style="color:#FFC94D" href="${esc(j.tv_url || "#/onde-ver")}" target="_blank">▶ ${esc(j.canal_tv || "FPP TV")}</a>` : ""}</div>${big(j.fora_id)}</div>
     ${goals.length ? `<div class="scorers"><div>${mk("casa")}</div><div style="text-align:right">${mk("fora")}</div></div>` : ""}
+    ${notifAtivas() ? `<div class="seguir-jogo"><span class="lbl">Recebe o início e o resultado final dos jogos</span><div>${botaoSeguir(teamKey(j.casa_id), tName(j.casa_id))}${botaoSeguir(teamKey(j.fora_id), tName(j.fora_id))}</div></div>` : ""}
     ${sponsor("jogo")}
     <div class="ldj-wrap">
       <div class="ldj-head"><div>${crest(j.casa_id, 34)}<b>${esc(tName(j.casa_id))}</b></div><span class="x">Linha de jogo</span><div><b>${esc(tName(j.fora_id))}</b>${crest(j.fora_id, 34)}</div></div>
@@ -372,6 +373,8 @@ const PRIVACIDADE = `**Quem somos.** O Hóquei em Português é um projeto indep
 **Onde ficam guardados.** Numa base de dados na Supabase (servidores na União Europeia ou com garantias equivalentes). O site está alojado na Netlify.
 
 **Cookies e publicidade.** O site guarda no teu navegador apenas preferências como o modo noite. Se mostrarmos publicidade da Google (AdSense), a Google pode usar cookies para mostrar e medir anúncios, só depois de dares consentimento na mensagem que aparece ao entrar. Podes mudar a tua escolha a qualquer momento em “Gerir cookies”, no fundo da página. Mais informação: [policies.google.com/technologies/ads](https://policies.google.com/technologies/ads).
+
+**Notificações.** Se seguires uma equipa, o teu navegador cria um endereço anónimo de notificações, que guardamos junto com as equipas que escolheste. Não guardamos nome nem email. Para deixar de receber, carrega outra vez em “A seguir” ou desliga as notificações nas definições do telemóvel; o endereço é apagado.
 
 **Patrocinadores.** Os banners de patrocinadores são imagens nossas; contamos apenas quantas vezes são vistos e clicados, sem identificar quem.
 
@@ -437,7 +440,7 @@ async function pClube(id, tab) {
     const news = (await q("noticias", { order: [["publicado_em", false]], limit: 60 })).filter(n => (n.clubes || []).includes(c.id));
     body = (all.map(trRow).join("") || empty("Sem movimentos de mercado.")) + (news.length ? `<div style="margin-top:36px">${sh("+", "Notícias")}<div class="grid g4">${news.slice(0, 8).map(nc).join("")}</div></div>` : "");
   }
-  return { html: `<div class="phd">${RINK}<div class="wrap" style="position:relative"><div class="crumbs"><a href="#/">Início</a> / <a href="#/clubes">Clubes</a> / ${esc(nomeEq)}</div><div class="clubhero">${crestC(c, 120, "cr")}<div><h1 class="x">${esc(nomeEq)}</h1><p>${esc([c.cidade, ...new Set(eqs.map(e => cn(compById(e.competicao_id))))].filter(Boolean).join(" · "))}</p>${outras.length ? `<p style="margin-top:8px">${outras.map(k => `<a class="chip" style="display:inline-flex;margin-right:6px" href="#/clube/${k}">${esc(teamLabel(eqsDaChave(k)[0]?.id))} →</a>`).join("")}</p>` : ""}</div></div><div class="tabs">${["Resumo", "Plantel", "Jogos", "Mercado e notícias"].map((x, k) => `<a class="tb ${k === tab ? "on" : ""}" href="#/clube/${chave}/${k}">${x}</a>`).join("")}</div></div></div><section style="padding-top:36px"><div class="wrap">${body}</div></section>`, after };
+  return { html: `<div class="phd">${RINK}<div class="wrap" style="position:relative"><div class="crumbs"><a href="#/">Início</a> / <a href="#/clubes">Clubes</a> / ${esc(nomeEq)}</div><div class="clubhero">${crestC(c, 120, "cr")}<div><h1 class="x">${esc(nomeEq)}</h1><p>${esc([c.cidade, ...new Set(eqs.map(e => cn(compById(e.competicao_id))))].filter(Boolean).join(" · "))}</p>${botaoSeguir(chave, nomeEq)}${outras.length ? `<p style="margin-top:8px">${outras.map(k => `<a class="chip" style="display:inline-flex;margin-right:6px" href="#/clube/${k}">${esc(teamLabel(eqsDaChave(k)[0]?.id))} →</a>`).join("")}</p>` : ""}</div></div><div class="tabs">${["Resumo", "Plantel", "Jogos", "Mercado e notícias"].map((x, k) => `<a class="tb ${k === tab ? "on" : ""}" href="#/clube/${chave}/${k}">${x}</a>`).join("")}</div></div></div><section style="padding-top:36px"><div class="wrap">${body}</div></section>`, after };
 }
 async function pJogador(id) {
   const p = (await q("jogadores", { eq: { id: +id } }))[0];
@@ -487,19 +490,19 @@ async function go(path) {
   cur = path || "/";
   try { if (location.hash !== "#" + cur) history.replaceState(null, "", "#" + cur); } catch (e) { }
   const p = cur.replace(/^\//, "").split("/").map(decodeURIComponent);
-  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade };
+  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade, notificacoes: pSeguir };
   const top = { competicao: "comp", jogo: "comp", noticias: "news", noticia: "news", clubes: "clubs", clube: "clubs", jogador: "clubs", mercado: "mkt", "onde-ver": "tv" }[p[0]] || "";
   closeMenu();
   $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px"><span class="lbl">A carregar…</span></div>`;
   try {
     const r = await (R[p[0]] || pHome)(p[1], p[2]);
     if (cur !== (path || "/")) return; // utilizador já navegou para outra página
-    $("#app").innerHTML = r.html; r.after && r.after(); afterSponsors($("#app"));
+    $("#app").innerHTML = r.html; r.after && r.after(); afterSponsors($("#app")); if (!/^\/notificacoes/.test(cur)) ligarSeguir($("#app"));
   } catch (e) { console.error(e); $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px">${empty("Ocorreu um erro a carregar esta página.")}</div>`; }
   document.querySelectorAll("#quick a, .tabbar a").forEach(a => a.classList.toggle("on", a.dataset.k === (top || (p[0] === "" ? "home" : ""))));
   window.scrollTo(0, 0);
 }
-document.addEventListener("click", e => { const a = e.target.closest("a"); if (!a) return; const h = a.getAttribute("href"); if (h && h.startsWith("#/")) { e.preventDefault(); go(h.slice(1)); } });
+document.addEventListener("click", e => { const a = e.target.closest("a"); if (!a) return; const h = a.getAttribute("href"); if (h === "#/instalar") { e.preventDefault(); instalarApp(); return; } if (h && h.startsWith("#/")) { e.preventDefault(); go(h.slice(1)); } });
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== cur) go(h); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
 
@@ -520,3 +523,76 @@ function setTheme(t) { document.documentElement.dataset.theme = t; $("#themeBtn"
   // atualiza o placar e a página do jogo de 2 em 2 minutos (o robô corre de 10 em 10)
   setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "")) go(cur); }, 120000);
 })();
+
+/* ---------------- app instalável e notificações ---------------- */
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const pushSuportado = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const notifAtivas = () => !!CFG.VAPID_PUBLIC_KEY;
+let pedidoInstalar = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); pedidoInstalar = e; });
+const seguidas = () => { try { return JSON.parse(localStorage.getItem("hp-seguir") || "[]"); } catch (e) { return []; } };
+const guardarSeguidas = l => { try { localStorage.setItem("hp-seguir", JSON.stringify(l)); } catch (e) { } };
+const b64u8 = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+function toast(msg) { let t = $("#toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.appendChild(t); } t.textContent = msg; t.className = "show"; clearTimeout(t._t); t._t = setTimeout(() => t.className = "", 3500); }
+function modal(titulo, html) {
+  let m = $("#modal"); if (!m) { m = document.createElement("div"); m.id = "modal"; document.body.appendChild(m); m.onclick = e => { if (e.target === m || e.target.closest("[data-fechar]")) m.classList.remove("open"); }; }
+  m.innerHTML = `<div class="mbox rink"><h3 class="x">${titulo}</h3>${html}<button class="btn" data-fechar style="margin-top:18px">Percebi</button></div>`; m.classList.add("open");
+}
+const instrIOS = (o) => `<p>No iPhone, as notificações só funcionam com a app instalada:</p><ol class="passos"><li>Abre este site no <b>Safari</b>.</li><li>Carrega em <b>Partilhar</b> <span class="ico-share">⬆︎</span> (em baixo).</li><li>Escolhe <b>Adicionar ao ecrã principal</b>.</li><li>Abre a app <b>Hóquei em Português</b> no ecrã principal${o ? " e carrega outra vez em 🔔 Seguir" : ""}.</li></ol>`;
+async function instalarApp() {
+  closeMenu();
+  if (standalone()) return modal("Já tens a app 🎉", "<p>Estás a usar o Hóquei em Português como app.</p>");
+  if (pedidoInstalar) { pedidoInstalar.prompt(); const r = await pedidoInstalar.userChoice; pedidoInstalar = null; if (r.outcome === "accepted") toast("App instalada ✓"); return; }
+  if (isIOS) return modal("Instalar a app", instrIOS(false));
+  modal("Instalar a app", "<p>Abre o menu do navegador (⋮) e escolhe <b>Instalar app</b> ou <b>Adicionar ao ecrã principal</b>.</p>");
+}
+function botaoSeguir(key, nome) {
+  if (!notifAtivas() || !key) return "";
+  const on = seguidas().includes(key);
+  return `<button class="seguir ${on ? "on" : ""}" data-seguir="${esc(key)}" data-nome="${esc(nome)}">${on ? "🔔 A seguir ✓" : "🔔 Seguir " + esc(nome)}</button>`;
+}
+function ligarSeguir(root) {
+  root.querySelectorAll("[data-seguir]").forEach(b => b.onclick = () => alternarSeguir(b.dataset.seguir, b.dataset.nome));
+}
+function atualizarBotoes() {
+  const l = seguidas();
+  document.querySelectorAll("[data-seguir]").forEach(b => { const on = l.includes(b.dataset.seguir); b.classList.toggle("on", on); b.textContent = on ? "🔔 A seguir ✓" : "🔔 Seguir " + b.dataset.nome; });
+}
+async function subscricao() {
+  const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+  return (await reg.pushManager.getSubscription()) || reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(CFG.VAPID_PUBLIC_KEY) });
+}
+async function guardarEquipas(l) {
+  const sub = await subscricao(), j = sub.toJSON();
+  const { error } = await sb.rpc("subscrever", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_equipas: l });
+  if (error) throw error;
+  if (!l.length) await sub.unsubscribe();
+}
+async function alternarSeguir(key, nome) {
+  if (!LIVE) return modal("Modo demonstração", "<p>As notificações funcionam quando o site estiver ligado ao Supabase.</p>");
+  if (isIOS && !standalone()) return modal("🔔 Avisos de " + esc(nome), instrIOS(true));
+  if (!pushSuportado()) return modal("Sem notificações", "<p>Este navegador não suporta notificações. Experimenta o Chrome (Android/computador) ou instala a app no iPhone.</p>");
+  const l = seguidas(), on = l.includes(key);
+  if (!on) {
+    const p = await Notification.requestPermission();
+    if (p !== "granted") return modal("Notificações bloqueadas", "<p>Para receberes os avisos, permite as notificações deste site nas definições do navegador (ícone do cadeado ao lado do endereço) e tenta outra vez.</p>");
+  }
+  const nova = on ? l.filter(x => x !== key) : [...l, key];
+  try {
+    await guardarEquipas(nova); guardarSeguidas(nova); atualizarBotoes();
+    toast(on ? "Deixaste de seguir " + nome : "Vais receber o início e o resultado final dos jogos de " + nome + " 🔔");
+  } catch (e) { console.error(e); modal("Não foi possível", "<p>Ocorreu um erro a ativar as notificações. Tenta outra vez mais tarde.</p>"); }
+}
+async function pSeguir() {
+  const l = seguidas();
+  const linha = k => { const e = eqsDaChave(k)[0]; return e ? `<div class="doc"><span class="d">🔔</span><b><a href="#/clube/${esc(k)}">${esc(teamLabel(e.id))}</a></b><button class="chip" data-seguir="${esc(k)}" data-nome="${esc(teamLabel(e.id))}">Deixar de seguir</button></div>` : ""; };
+  return { html: hd([["Notificações"]], "Notificações", "Recebe um aviso quando um jogo das tuas equipas começa e quando termina, com o resultado final.") + `<section style="padding-top:36px"><div class="wrap article">
+    ${!notifAtivas() ? empty("As notificações ainda não estão ativas neste site.") : l.length ? `<div class="docs">${l.map(linha).join("")}</div>` : empty("Ainda não segues nenhuma equipa. Abre a página de uma equipa ou de um jogo e carrega em 🔔 Seguir.")}
+    <h3 class="x" style="font-size:24px;margin:34px 0 10px">Como funciona</h3>
+    <p>🏒 <b>Início do jogo</b>: avisamos quando o jogo começa, e que vais receber o resultado final.</p><p>🏁 <b>Resultado final</b>: o resultado, quando o jogo termina.</p>
+    <p class="note">Os resultados vêm do hp.fpp.pt e são atualizados de 10 em 10 minutos, por isso os avisos podem chegar alguns minutos depois. Não precisas de conta: as escolhas ficam guardadas neste aparelho.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px"><button class="btn" id="instalar">📲 Instalar a app</button></div></div></section>`,
+    after: () => { $("#instalar").onclick = instalarApp; document.querySelectorAll("[data-seguir]").forEach(b => b.onclick = async () => { await alternarSeguir(b.dataset.seguir, b.dataset.nome); go("/notificacoes"); }); } };
+}
+if ("serviceWorker" in navigator && (location.protocol === "https:" || /^(localhost|127\.0\.0\.1)$/.test(location.hostname))) window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => { }));

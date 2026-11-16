@@ -11,7 +11,7 @@ Modos:
 
 Variáveis de ambiente obrigatórias: SUPABASE_URL, SUPABASE_SERVICE_KEY
 """
-import os, re, sys, time, json, html as htmlmod
+import os, re, sys, time, json, base64, unicodedata, html as htmlmod
 from datetime import datetime, date, timedelta, timezone
 from zoneinfo import ZoneInfo
 import requests
@@ -21,6 +21,11 @@ BASE = "https://hp.fpp.pt"
 DELAY = float(os.environ.get("SCRAPER_DELAY", "0.6"))   # pausa entre pedidos ao fpp.pt
 MAX_BACKFILL = int(os.environ.get("SCRAPER_BACKFILL", "40"))  # jogos antigos sem detalhes por execução
 TZ_PT = ZoneInfo("Europe/Lisbon")  # só serve para saber o que é "hoje"
+
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()   # chave privada (backoffice > Notificações)
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "").strip() or "mailto:hoqueiemportugues@gmail.com"
+INICIO_JANELA = (-2, 45)    # minutos à volta da hora marcada em que se avisa o início
+FINAL_APOS = 95             # minutos depois da hora marcada a partir dos quais o jogo conta como terminado
 
 RE_EQUIPA = re.compile(r"/Equipa/(\d+)/(\d+)")
 RE_JOGO = re.compile(r"/jogo/(\d+)")
@@ -36,6 +41,55 @@ def txt(el):
 def base_clube(n):
     """'J. Pacense "B"' -> 'J. Pacense' (o clube é o mesmo da equipa principal)"""
     return re.sub(r'\s+["“”\']?[B-D]["“”\']?\s*$', "", (n or "").strip())
+
+
+def hora_jogo(j):
+    """Data + hora do jogo em Portugal, ou None."""
+    if not j.get("data") or not j.get("hora"):
+        return None
+    try:
+        h, m = (int(x) for x in j["hora"].split(":")[:2])
+        return datetime.fromisoformat(j["data"]).replace(hour=h, minute=m, tzinfo=TZ_PT)
+    except ValueError:
+        return None
+
+
+def _norm(t):
+    return unicodedata.normalize("NFD", t or "").encode("ascii", "ignore").decode().lower()
+
+
+def limpar_nome(n):
+    n = re.split(r"\s*/\s*", (n or "").strip())[0].strip()
+    n = re.sub(r"\s+SAD$", "", n, flags=re.I)
+    return re.sub(r'\s*["“”\']([A-D])["“”\']\s*$', r" \1", n).strip()
+
+
+def sufixo(n):
+    m = re.search(r"\s([B-D])$", limpar_nome(n))
+    return m.group(1) if m else ""
+
+
+def escalao(comp):
+    t = _norm((comp or {}).get("nome", "") + " " + ((comp or {}).get("grupo") or ""))
+    if "femin" in t:
+        return "F"
+    m = re.search(r"sub\s*-?\s*(\d+)", t)
+    return "S" + m.group(1) if m else ""
+
+
+def chave_equipa(eq, comp):
+    """Igual ao teamKey do site: 123, 123-B, 123-F, 123-B-S23..."""
+    if not eq.get("clube_id"):
+        return "e%s" % eq["id"]
+    s, x = sufixo(eq["nome"]), escalao(comp)
+    return str(eq["clube_id"]) + ("-" + s if s else "") + ("-" + x if x else "")
+
+
+def nome_equipa(eq, clube):
+    s = sufixo(eq["nome"])
+    if clube and clube.get("nome_curto"):
+        return clube["nome_curto"] + (" " + s if s else "")
+    return limpar_nome(eq["nome"])
 
 
 def to_int(s):
@@ -389,12 +443,13 @@ class Robo:
         jogos, equipas = parse_calendar(self.get(f"/Competicao/{cid}"), cid)
         self.db.upsert("equipas", [{"id": k, "competicao_id": cid, "nome": v} for k, v in equipas.items()], "id")
 
+        agora = datetime.now(TZ_PT)
         for j in jogos:
             if j["golos_casa"] is None:
                 j["estado"] = "agendado"
             else:
-                d = date.fromisoformat(j["data"]) if j["data"] else self.hoje
-                j["estado"] = "provisorio" if d >= self.hoje else "final"
+                k = hora_jogo(j)
+                j["estado"] = "final" if (k is None and j["data"] and j["data"] < self.hoje.isoformat()) or (k is not None and agora - k >= timedelta(minutes=FINAL_APOS)) else "provisorio"
         self.db.upsert("jogos", jogos, "id")
 
         cls = parse_classificacao(self.get(f"/Classificacao/{cid}"))
@@ -488,11 +543,94 @@ class Robo:
                 if e["competicao_id"] in ativos:
                     self.tentar(f"equipa {e['id']}", self.equipa, e["competicao_id"], e["id"])
 
+        self.tentar("notificações", self.notificar)
+
         self.db.upsert("definicoes", [{"chave": "ultima_atualizacao", "valor": {
             "quando": datetime.now(timezone.utc).isoformat(), "modo": modo, "pedidos": self.pedidos,
             "competicoes": len(comps), "erros": self.erros[-20:]}}], "chave")
         print(f"Feito ({modo}): {self.pedidos} pedidos ao hp.fpp.pt, {len(self.erros)} erros")
         return len(self.erros) == 0 or self.pedidos > 0
+
+    # ---------- notificações (início e resultado final) ----------
+    def notificar(self):
+        if not VAPID_PRIVATE_KEY:
+            print("Notificações desligadas (falta o segredo VAPID_PRIVATE_KEY)")
+            return
+        from py_vapid import Vapid01
+        self.vapid = Vapid01.from_raw(VAPID_PRIVATE_KEY.strip().encode())  # a chave "d" (base64url) gerada no backoffice
+        self.manuais()
+        agora = datetime.now(TZ_PT)
+        ontem = (self.hoje - timedelta(days=1)).isoformat()
+        jogos = self.db.select("jogos", f"select=id,competicao_id,jornada_nome,data,hora,casa_id,fora_id,golos_casa,golos_fora&data=gte.{ontem}&data=lte.{self.hoje.isoformat()}")
+        if not jogos:
+            return
+        ids = ",".join(str(j["id"]) for j in jogos)
+        feitos = {(n["jogo_id"], n["tipo"]) for n in self.db.select("notificacoes_enviadas", f"select=jogo_id,tipo&jogo_id=in.({ids})")}
+        comps = {c["id"]: c for c in self.db.select("competicoes", "select=id,nome,nome_curto,grupo,ativa")}
+        eids = ",".join({str(j["casa_id"]) for j in jogos} | {str(j["fora_id"]) for j in jogos})
+        eqs = {e["id"]: e for e in self.db.select("equipas", f"select=id,nome,clube_id,competicao_id&id=in.({eids})")}
+        clubes = {c["id"]: c for c in self.db.select("clubes", "select=id,nome_curto&nome_curto=not.is.null")}
+        fila = []
+        for j in jogos:
+            comp = comps.get(j["competicao_id"])
+            k = hora_jogo(j)
+            if not comp or not comp.get("ativa") or k is None or j["casa_id"] not in eqs or j["fora_id"] not in eqs:
+                continue
+            mins = (agora - k).total_seconds() / 60
+            if INICIO_JANELA[0] <= mins <= INICIO_JANELA[1] and (j["id"], "inicio") not in feitos:
+                fila.append(("inicio", j, comp))
+            if j["golos_casa"] is not None and FINAL_APOS <= mins <= 14 * 60 and (j["id"], "final") not in feitos:
+                fila.append(("final", j, comp))
+        if not fila:
+            return
+        subs = self.db.select("subscricoes", "select=endpoint,p256dh,auth,equipas")
+        for tipo, j, comp in fila:
+            ec, ef = eqs[j["casa_id"]], eqs[j["fora_id"]]
+            casa, fora = nome_equipa(ec, clubes.get(ec.get("clube_id"))), nome_equipa(ef, clubes.get(ef.get("clube_id")))
+            chaves = {chave_equipa(ec, comp), chave_equipa(ef, comp)}
+            prova = (comp.get("nome_curto") or comp["nome"]) + (" · " + j["jornada_nome"] if j.get("jornada_nome") else "")
+            if tipo == "inicio":
+                msg = {"title": f"🏒 Começou: {casa} vs {fora}", "body": f"{prova}. Vais receber o resultado final quando o jogo terminar.", "tag": f"jogo-{j['id']}"}
+            else:
+                msg = {"title": f"🏁 Final: {casa} {j['golos_casa']}-{j['golos_fora']} {fora}", "body": f"{prova}. Toca para veres a linha de jogo.", "tag": f"jogo-{j['id']}"}
+            msg["url"] = f"/#/jogo/{j['id']}"
+            alvo = [x for x in subs if chaves & set(x.get("equipas") or [])]
+            enviados = self.enviar(alvo, msg, 3600 if tipo == "inicio" else 43200, f"{tipo} jogo {j['id']}")
+            self.db.upsert("notificacoes_enviadas", [{"jogo_id": j["id"], "tipo": tipo, "destinatarios": enviados}], "jogo_id,tipo")
+            print(f"Notificação {tipo} do jogo {j['id']}: {enviados} aparelhos")
+
+    def enviar(self, subs, msg, ttl, nome):
+        """Envia uma notificação a vários aparelhos. Devolve quantos a receberam."""
+        from pywebpush import webpush, WebPushException
+        enviados = 0
+        for sub in subs:
+            try:
+                webpush({"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+                        json.dumps(msg, ensure_ascii=False), vapid_private_key=self.vapid,
+                        vapid_claims={"sub": VAPID_SUBJECT}, ttl=ttl, timeout=10)
+                enviados += 1
+            except WebPushException as ex:
+                st = getattr(getattr(ex, "response", None), "status_code", None)
+                if st in (404, 410):  # o aparelho deixou de aceitar notificações: apagar
+                    self.db.delete("subscricoes", "endpoint=eq." + requests.utils.quote(sub["endpoint"], safe=""))
+                else:
+                    self.erros.append(f"notificação {nome}: {st} {str(ex)[:120]}")
+            except Exception as ex:
+                self.erros.append(f"notificação {nome}: {str(ex)[:150]}")
+        return enviados
+
+    def manuais(self):
+        """Notificações pedidas no backoffice (teste ou aviso a todos)."""
+        pend = self.db.select("notificacoes_manuais", "select=id,titulo,corpo,url,destino,endpoint&enviado_em=is.null&order=criado_em&limit=20")
+        if not pend:
+            return
+        subs = self.db.select("subscricoes", "select=endpoint,p256dh,auth,equipas")
+        for n in pend:
+            alvo = subs if n["destino"] == "todos" else [x for x in subs if x["endpoint"] == n.get("endpoint")]
+            msg = {"title": n["titulo"], "body": n.get("corpo") or "", "url": n.get("url") or "/", "tag": "manual-" + n["id"][:8]}
+            env = self.enviar(alvo, msg, 3600, "manual " + n["id"][:8])
+            self.db.upsert("notificacoes_manuais", [{"id": n["id"], "enviado_em": datetime.now(timezone.utc).isoformat(), "destinatarios": env}], "id")
+            print(f"Notificação manual '{n['titulo']}': {env} aparelhos")
 
     def tentar(self, nome, fn, *a):
         try:

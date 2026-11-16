@@ -19,6 +19,7 @@ function fakeClient(data) {
     auth: { async getSession() { return { data: { session: sessionStorage.demo ? { user: { email: "demo@hoquei.pt" } } : null } }; },
       async signInWithPassword() { sessionStorage.demo = 1; return { data: {}, error: null }; },
       async signOut() { delete sessionStorage.demo; }, async resetPasswordForEmail() { return { error: null }; } },
+    async rpc() { return { error: null }; },
     storage: { from() { return { async upload() { return { error: { message: "Em modo demonstração não há upload. Cola um link de imagem." } }; }, getPublicUrl() { return { data: { publicUrl: "" } }; } }; } },
     from(t) {
       const f = []; let ord = [], lim, op = "select", payload;
@@ -266,6 +267,67 @@ S.patrocinios = async (id) => {
   return { html: `<div class="head"><h1>Patrocínios</h1><a class="btn" href="#patrocinios/new">+ Novo patrocínio</a></div><p class="hint">Banners dos teus patrocinadores. Se houver vários na mesma posição, o site mostra um ao acaso em cada visita (na faixa de parceiros aparecem todos). As vistas e os cliques servem para mostrares resultados ao patrocinador.</p><table class="tbl"><thead><tr><th></th><th>Patrocinador</th><th>Onde</th><th>Período</th><th>Vistas</th><th>Cliques</th><th>Estado</th></tr></thead><tbody>${l.map(s => { const fora = (s.inicio && s.inicio > hoje) || (s.fim && s.fim < hoje); return `<tr data-h="#patrocinios/${s.id}"><td>${s.imagem_url ? `<img class="mini" src="${esc(s.imagem_url)}" alt="" style="width:70px">` : ""}</td><td><b>${esc(s.nome)}</b></td><td>${esc((POSICOES.find(p => p[0] === s.posicao) || [0, s.posicao])[1])}</td><td>${esc(s.inicio || "…")} → ${esc(s.fim || "…")}</td><td>${s.vistas || 0}</td><td>${s.cliques || 0}</td><td>${!s.ativo ? '<span class="tag">desligado</span>' : fora ? '<span class="tag">fora de prazo</span>' : '<span class="tag ok">a aparecer</span>'}</td></tr>`; }).join("") || `<tr><td colspan="7">Ainda sem patrocínios.</td></tr>`}</tbody></table>`, after: listFilter };
 };
 
+
+/* --- Notificações --- */
+const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64u8a = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function gerarChaves() {
+  const k = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pub = b64u(await crypto.subtle.exportKey("raw", k.publicKey));
+  const priv = (await crypto.subtle.exportKey("jwk", k.privateKey)).d;
+  return { pub, priv };
+}
+async function esteAparelho() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("Este navegador não suporta notificações (no iPhone, instala primeiro a app no ecrã principal).");
+  if (await Notification.requestPermission() !== "granted") throw new Error("As notificações estão bloqueadas neste navegador. Permite-as nas definições do site e tenta outra vez.");
+  const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+  return { reg, sub: (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8a(CFG.VAPID_PUBLIC_KEY) }) };
+}
+S.notificacoes = async () => {
+  const ativo = !!CFG.VAPID_PUBLIC_KEY;
+  const [subs, envs, man, defs] = await Promise.all([all("subscricoes", x => x.limit(5000)), all("notificacoes_enviadas", x => x.order("enviado_em", { ascending: false }).limit(15)), all("notificacoes_manuais", x => x.order("criado_em", { ascending: false }).limit(10)), all("definicoes")]);
+  const cont = {}; subs.forEach(s => (s.equipas || []).forEach(k => { if (k !== "teste") cont[k] = (cont[k] || 0) + 1; }));
+  const nomeChave = k => { const m = /^(\d+)(?:-([B-D]))?(?:-(F|S\d+))?$/.exec(k); if (!m) return k; const c = club(+m[1]); return (c ? clubName(c) : k) + (m[2] ? " " + m[2] : "") + (m[3] ? " · " + (m[3] === "F" ? "Feminino" : "Sub-" + m[3].slice(1)) : ""); };
+  const top = Object.entries(cont).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const u = defs.find(d => d.chave === "ultima_atualizacao")?.valor || {};
+  return { html: `<h1>Notificações</h1>
+    ${!ativo ? `<div class="card warn" style="margin-bottom:22px"><b style="font-size:18px">As notificações ainda não estão ligadas</b><p style="margin-top:8px">Segue os 3 passos abaixo (só é preciso fazer uma vez).</p></div>` : ""}
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><span>Aparelhos a seguir equipas</span><b>${subs.filter(s => (s.equipas || []).some(k => k !== "teste")).length}</b></div><div class="card"><span>Avisos enviados (últimos)</span><b>${envs.reduce((s, n) => s + (n.destinatarios || 0), 0)}</b><small>${envs.length} jogos</small></div><div class="card"><span>Última execução do robô</span><b style="font-size:18px">${u.quando ? new Date(u.quando).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) : "—"}</b><small>envia os avisos e os testes</small></div></div>
+
+    <h2>🔔 Enviar notificação de teste</h2>
+    <div class="form" style="grid-template-columns:1fr 1fr">
+      <div class="fld"><label>1. Teste rápido neste aparelho<small>Mostra já uma notificação aqui. Confirma que o navegador deixa mostrar notificações.</small></label><button class="btn o" id="tLocal" ${ativo ? "" : "disabled"}>Mostrar notificação agora</button></div>
+      <div class="fld"><label>2. Teste completo pelo servidor<small>O robô envia-a como envia os avisos dos jogos. Chega na próxima execução (até 10 min)${CFG.GITHUB_REPO ? ", ou já, se correres o robô à mão" : ""}.</small></label><button class="btn" id="tServidor" ${ativo ? "" : "disabled"}>Enviar teste para este aparelho</button>${CFG.GITHUB_REPO ? `<a class="link" style="margin-top:6px" target="_blank" href="https://github.com/${esc(CFG.GITHUB_REPO)}/actions/workflows/scrape.yml">Correr o robô agora ↗ (Run workflow → rápido)</a>` : ""}</div>
+    </div>
+    ${man.length ? `<table class="tbl" style="margin-top:14px"><thead><tr><th>Teste / aviso</th><th>Pedido</th><th>Enviado</th><th>Aparelhos</th></tr></thead><tbody>${man.map(n => `<tr><td><b>${esc(n.titulo)}</b></td><td>${new Date(n.criado_em).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" })}</td><td>${n.enviado_em ? new Date(n.enviado_em).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" }) : '<span class="tag">à espera do robô</span>'}</td><td>${n.destinatarios ?? "—"}</td></tr>`).join("")}</tbody></table>` : ""}
+
+    <h2>Equipas mais seguidas</h2>${top.length ? `<table class="tbl"><tbody>${top.map(([k, n]) => `<tr><td><b>${esc(nomeChave(k))}</b></td><td>${n} aparelho${n === 1 ? "" : "s"}</td></tr>`).join("")}</tbody></table>` : `<p class="hint">Ainda ninguém segue equipas.</p>`}
+    <h2>Últimos avisos automáticos</h2>${envs.length ? `<table class="tbl"><thead><tr><th>Jogo</th><th>Tipo</th><th>Quando</th><th>Aparelhos</th></tr></thead><tbody>${envs.map(n => `<tr><td>${n.jogo_id}</td><td>${n.tipo === "inicio" ? "🏒 Início" : "🏁 Final"}</td><td>${new Date(n.enviado_em).toLocaleString("pt-PT", { dateStyle: "short", timeStyle: "short" })}</td><td>${n.destinatarios}</td></tr>`).join("")}</tbody></table>` : `<p class="hint">Ainda não foram enviados avisos de jogos.</p>`}
+
+    <h2>⚙️ Ligar as notificações (uma vez)</h2>
+    <div class="form" style="grid-template-columns:1fr">
+      <div class="fld"><label>Passo 1 — Gerar as chaves<small>${ativo ? "⚠️ Já tens chaves configuradas. Se gerares novas, todos os aparelhos que seguem equipas deixam de receber avisos." : "Carrega no botão. As chaves são criadas aqui no teu navegador e não são enviadas a lado nenhum."}</small></label><button class="btn ${ativo ? "o" : ""}" id="gerar" style="width:max-content">Gerar chaves</button><div id="chaves"></div></div>
+    </div>`,
+    after: () => {
+      $("#gerar").onclick = async () => {
+        if (ativo && !confirmBox("Já tens chaves. Gerar novas desliga os avisos de quem já segue equipas. Continuar?")) return;
+        const k = await gerarChaves();
+        $("#chaves").innerHTML = `<div class="kbox"><b>Passo 2 — Chave PÚBLICA → <code>config.js</code></b><p>No GitHub, edita o <code>config.js</code> e põe:</p><pre>VAPID_PUBLIC_KEY: "${k.pub}",</pre><button type="button" class="btn sm o" data-cp="VAPID_PUBLIC_KEY: &quot;${k.pub}&quot;,">Copiar</button></div>
+          <div class="kbox"><b>Passo 3 — Chave PRIVADA → segredo do GitHub</b><p>Em <b>Settings → Secrets and variables → Actions → New repository secret</b> cria:</p><p>Nome <code>VAPID_PRIVATE_KEY</code> e valor:</p><pre>${k.priv}</pre><button type="button" class="btn sm o" data-cp="${k.priv}">Copiar</button><p style="margin-top:10px">E outro: nome <code>VAPID_SUBJECT</code>, valor <code>mailto:o-teu-email@gmail.com</code></p><p class="hint" style="margin-top:8px">⚠️ A chave privada nunca vai para o site nem para o config.js. Guarda-a só no segredo do GitHub. Esta página não a guarda: se fechares sem a copiar, gera outra.</p></div>`;
+        document.querySelectorAll("[data-cp]").forEach(b => b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.cp); toast("Copiado ✓"); } catch (e) { toast("Seleciona o texto e copia", 1); } });
+      };
+      if ($("#tLocal")) $("#tLocal").onclick = async () => { try { if (await Notification.requestPermission() !== "granted") throw new Error("As notificações estão bloqueadas neste navegador."); const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready; await reg.showNotification("🔔 Teste — Hóquei em Português", { body: "Se estás a ver isto, este aparelho mostra notificações.", icon: "/icones/icon-192.png" }); toast("Notificação mostrada ✓"); } catch (e) { toast(e.message, 1); } };
+      if ($("#tServidor")) $("#tServidor").onclick = async () => {
+        try {
+          const { sub } = await esteAparelho(); const j = sub.toJSON();
+          const { error } = await sb.rpc("subscrever", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_equipas: ["teste"] });
+          if (error) throw error;
+          if (await save("notificacoes_manuais", { id: "new", titulo: "🏁 Teste: Hóquei em Português", corpo: "Se recebeste isto, as notificações dos jogos estão a funcionar ✓", url: "/", destino: "endpoint", endpoint: j.endpoint })) { toast("Pedido enviado. Chega na próxima execução do robô."); route(); }
+        } catch (e) { toast(e.message || "Erro", 1); }
+      };
+    } };
+};
+
 /* --- Competições --- */
 S.competicoes = async () => ({
   html: `<h1>Competições</h1><p class="hint">O robô descobre as competições sozinho. Desliga “ativa” nas que não queres no site (e o robô deixa de as atualizar). “Menu” escolhe se a competição aparece em destaque no menu e nos botões das competições, ou dentro de “Mais competições”. “Página inicial” é a competição da tabela e da jornada da página inicial. “Parte (min)” é a duração de cada parte (25 nos seniores; muda se uma prova usar partes mais curtas) e serve para calcular o minuto dos golos.</p><table class="tbl"><thead><tr><th>Nome oficial</th><th>Nome no site</th><th>Ordem</th><th>Parte (min)</th><th>Menu</th><th>Ativa</th><th>Página inicial</th><th></th></tr></thead><tbody>${D.comps.map(c => `<tr data-id="${c.id}"><td><b>${esc(c.nome)}</b><br><small>${esc(c.grupo || "")} · id ${c.id}</small></td><td><input class="in" data-k="nome_curto" value="${esc(c.nome_curto)}" placeholder="${esc(c.nome)}"></td><td><input class="in" type="number" data-k="ordem" value="${esc(c.ordem)}" style="width:70px"></td><td><input class="in" type="number" data-k="duracao_parte" value="${esc(c.duracao_parte ?? 25)}" style="width:70px" title="Duração de cada parte, para calcular o minuto dos golos"></td><td><select class="in" data-k="menu" style="min-width:150px"><option value="principal" ${c.menu === "principal" ? "selected" : ""}>Competição principal</option><option value="mais" ${c.menu !== "principal" ? "selected" : ""}>Mais competições</option></select></td><td><input type="checkbox" data-k="ativa" ${c.ativa ? "checked" : ""}></td><td><input type="radio" name="pr" data-k="principal" ${c.principal ? "checked" : ""}></td><td><button class="btn sm">Guardar</button></td></tr>`).join("") || `<tr><td colspan="6">Sem competições (corre o robô em modo “completo”).</td></tr>`}</tbody></table>`,
@@ -298,7 +360,7 @@ S.definicoes = async () => {
 };
 
 /* ---------- navegação ---------- */
-const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
+const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["notificacoes", "Notificações"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
 async function route() {
   const h = location.hash.slice(1) || "painel";
   const [path, qs] = h.split("?"); const [sec, id] = path.split("/");
