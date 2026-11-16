@@ -1,0 +1,33 @@
+name: Atualizar competições europeias (WSE)
+
+on:
+  schedule:
+    # Horas em UTC. De meia em meia hora entre as 8h e as 24h; o site da WSE só mostra os dados num navegador,
+    # por isso este robô abre um navegador automático (Chromium) e lê as páginas como um visitante.
+    - cron: "11,41 8-23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: europa
+  cancel-in-progress: false
+
+jobs:
+  europa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scraper/requirements-europa.txt
+      - run: pip install -r scraper/requirements-europa.txt
+      - name: Instalar o navegador
+        run: python -m playwright install --with-deps chromium
+      - name: Ler o site da WSE
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PYTHONUNBUFFERED: "1"
+        run: python scraper/europa.py

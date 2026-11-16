@@ -2,18 +2,19 @@ name: Atualizar dados do hp.fpp.pt
 
 on:
   schedule:
-    # Horas em UTC (Portugal = UTC no inverno, UTC+1 no verão).
-    - cron: "*/10 9-23 * * *"   # de 10 em 10 min entre as 9h e as 24h: horas dos jogos (e das notificações)
-    - cron: "7 0-8 * * *"       # de hora a hora durante a noite
+    # Horas em UTC (Portugal = UTC no inverno, UTC+1 no verão). O robô vê a hora de Portugal sozinho:
+    #  - entre as 14:30 e as 23:30 fica LIGADO em modo ao vivo (jogos de 30 em 30 s, classificações de 5 em 5 min);
+    #  - fora dessas horas faz uma leitura rápida e desliga.
+    # Se o modo ao vivo já estiver a correr, a execução seguinte fica em espera e continua quando a anterior acabar
+    # (o GitHub não deixa uma execução passar das 6 horas, por isso o dia é feito em 2 partes).
+    - cron: "25 * * * *"        # de hora a hora
     - cron: "17 5 * * *"        # 1x por dia às 05:17: competições novas e plantéis completos
-    # NOTA: num repositório PÚBLICO o GitHub Actions é grátis e ilimitado.
-    # Num repositório PRIVADO tens ~2000 min/mês grátis: troca "*/10" por "*/30".
-  workflow_dispatch:          # botão "Run workflow" para correr à mão
+  workflow_dispatch:            # botão "Run workflow" para correr à mão
     inputs:
       modo:
-        description: "rapido ou completo"
+        description: "auto, aovivo, rapido ou completo"
         required: true
-        default: "completo"
+        default: "auto"
 
 concurrency:
   group: scraper
@@ -22,7 +23,7 @@ concurrency:
 jobs:
   atualizar:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,8 +38,9 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          MODO="rapido"
+          MODO="auto"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then MODO="${{ github.event.inputs.modo }}"; fi
           if [ "${{ github.event.schedule }}" = "17 5 * * *" ]; then MODO="completo"; fi
           python scraper/scrape.py "$MODO"
