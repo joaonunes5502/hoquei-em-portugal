@@ -13,9 +13,11 @@ window.HP_DEMO = (function () {
   ].map(([id, nome, cor, cidade]) => ({ id, nome, cor, cidade, logo_url: F + "CLUBE_" + id + ".png", nome_curto: null, logo_custom: null, pavilhao: null, instagram: null, descricao: null }));
   const eqId = { 123: 1182, 129: 1184, 127: 1178, 125: 1186, 1329: 1159, 122: 1187, 124: 1188, 128: 1167, 116: 1172, 1333: 1181, 951: 1185, 126: 1189, 120: 1190, 155: 1183 };
   const equipas = clubes.map(c => ({ id: eqId[c.id], competicao_id: 493, clube_id: c.id, nome: c.nome }));
+  equipas.push({ id: 1203, competicao_id: 494, clube_id: 123, nome: 'J. Pacense "B"' }, { id: 1300, competicao_id: 511, clube_id: 123, nome: "J. Pacense" });
   const competicoes = [
     { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1, menu: "principal" },
     { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
+    { id: 511, nome: "CN Sub 23 Norte", grupo: "Campeonato Nacional Sub 23", nome_curto: null, ativa: true, principal: false, ordem: 4, menu: "mais" },
     { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "mais" }
   ];
   // jornadas 1 e 2 reais; o resto é calendário de exemplo
@@ -56,6 +58,7 @@ window.HP_DEMO = (function () {
     P(167515, "Miguel Rocha", "FED/FED_165001_170000/FED_167515.jpg", null, 1185, 8), P(170390, "Gonçalo Neto", "FED/FED_170001_175000/FED_170390.jpeg", null, 1190, 3),
     P(168745, "João Rodrigues", "FED/FED_165001_170000/FED_168745.jpeg", null, 1181, 3), P(170969, "David Fonseca", "FED/FED_170001_175000/FED_170969.jpg", null, 1183, 3)
   ];
+  J.push(P(170001, "Jogador da equipa B", "x.png", 3, 1203, 0));
   const plantel = J.map(p => ({ equipa_id: p._eq, jogador_id: p.id, golos: p._g, manual: false }));
   const marcadores = J.filter(p => p._g > 0).sort((a, b) => b._g - a._g).map((p, i) => ({ competicao_id: 493, jogador_id: p.id, pos: i + 1, nome: p.nome, clube_id: equipas.find(e => e.id === p._eq).clube_id, golos: p._g }));
   const tecnicos = [{ equipa_id: 1182, nome: "Hugo Azevedo", funcao: "Treinador" }, { equipa_id: 1182, nome: "Tiago Sousa", funcao: "Treinador Adjunto" }, { equipa_id: 1184, nome: "André Torres", funcao: "Treinador" }];

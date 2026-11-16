@@ -74,6 +74,14 @@ function compPicker(c, tab) {
 const cn = c => c ? (c.nome_curto || c.nome) : "";
 const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
 const sufixo = n => (clean(n).match(/\s([B-D])$/) || [])[1];
+// cada equipa é "clube + letra" (123 = principal, 123-B = equipa B); junta a mesma equipa em várias competições
+// escalão pela competição: femininas e sub-23 são equipas diferentes do mesmo clube
+const escalao = c => { const n = norm((c?.nome || "") + " " + (c?.grupo || "")); if (/femin/.test(n)) return "F"; const s = /sub\s*-?\s*(\d+)/.exec(n); return s ? "S" + s[1] : ""; };
+const ESC_NOME = { F: "Feminino" };
+const escNome = k => ESC_NOME[k] || (k ? "Sub-" + k.slice(1) : "");
+const teamKey = eid => { const e = B.equipas.get(eid); if (!e) return ""; if (!e.clube_id) return "e" + e.id; const s = sufixo(e.nome), x = escalao(compById(e.competicao_id)); return e.clube_id + (s ? "-" + s : "") + (x ? "-" + x : ""); };
+const teamLabel = eid => { const e = B.equipas.get(eid); const x = escalao(compById(e?.competicao_id)); return tName(eid) + (x ? " · " + escNome(x) : ""); };
+const eqsDaChave = k => { const m = /^e(\d+)$/.exec(k); if (m) return [...B.equipas.values()].filter(e => e.id === +m[1]); return [...B.equipas.values()].filter(e => teamKey(e.id) === k); };
 const clubOfTeam = eid => B.clubes.get(B.equipas.get(eid)?.clube_id);
 const clubName = c => c ? (c.nome_curto || clean(c.nome).replace(/\s[B-D]$/, "")) : "";
 const tName = eid => { const e = B.equipas.get(eid), c = clubOfTeam(eid); if (!e) return "—"; const s = sufixo(e.nome); return c?.nome_curto ? c.nome_curto + (s ? " " + s : "") : clean(e.nome); };
@@ -175,7 +183,7 @@ async function pHome() {
   { const sp = sponsor("inicio"); if (sp) s += `<div class="wrap" style="margin-top:10px">${sp}</div>`; }
   if (c) s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px">
     <div>${sh("02", (last[0]?.jornada_nome || "Jornada"), ["Todos os jogos", `#/competicao/${c.id}/1`])}<div class="mini">${last.map(j => `<a class="r" href="#/jogo/${j.id}"><span class="a">${esc(tName(j.casa_id))} ${crest(j.casa_id)}</span><span class="s">${score(j) || esc(j.hora || "—")}</span><span>${crest(j.fora_id)}${esc(tName(j.fora_id))}</span></a>`).join("") || empty("Sem jogos.")}</div></div>
-    <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${clubOfTeam(r.equipa_id)?.id || ""}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
+    <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="grid-template-columns:${ej.length ? "1.4fr 1fr" : "1fr"};gap:56px">
     ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}${sponsor("equipa_jornada")}</div>` : ""}
     <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span><b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
@@ -226,7 +234,7 @@ async function pComp(id, tab) {
   const chips = compPicker(c, tab);
   let body = "", after;
   if (tab === 0) {
-    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${clubOfTeam(r.equipa_id)?.id || ""}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>` : empty("Esta prova não tem classificação (ou ainda não começou).");
+    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>` : empty("Esta prova não tem classificação (ou ainda não começou).");
   } else if (tab === 1) {
     const jors = [...new Set(jogos.map(j => j.jornada))].filter(x => x != null).sort((a, b) => a - b);
     let cur = ultimaJornada(jogos);
@@ -303,8 +311,8 @@ async function pJogo(id) {
     ["Cartões vermelhos", n("vermelho", "casa"), n("vermelho", "fora")],
     ["Time-outs", n("desconto", "casa"), n("desconto", "fora")]
   ].filter(s => s[1] != null && (s[0] === "Golos" || s[0] === "Faltas de equipa" || +s[1] + +s[2] > 0));
-  const big = eid => `<a href="#/clube/${clubOfTeam(eid)?.id || ""}" style="display:block">${crest(eid, 84).replace('class="crest', 'style="margin:0 auto 14px;display:grid" class="crest')}<div class="x">${esc(tName(eid))}</div></a>`;
-  const mk = l => goals.filter(g => g.lado === l).map(g => `${esc(g.jogador || "")} ${g.min != null ? g.min + "'" : ""} ${EV[g.tipo][0]}`).join("<br>");
+  const big = eid => `<a href="#/clube/${teamKey(eid)}" style="display:block">${crest(eid, 84).replace('class="crest', 'style="margin:0 auto 14px;display:grid" class="crest')}<div class="x">${esc(tName(eid))}</div></a>`;
+  const mk = l => { const m = new Map(); goals.filter(g => g.lado === l).forEach(g => { const k = g.jogador_id || g.jogador || "?"; const x = m.get(k) || { nome: g.jogador || "—", n: 0 }; x.n++; m.set(k, x); }); return [...m.values()].map(x => esc(x.nome) + (x.n > 1 ? ` (${x.n})` : "")).join("<br>"); };
   const temEv = ev.length > 0;
   return { html: hd([[cn(c), "#/competicao/" + j.competicao_id], ["Jogo"]], `${tName(j.casa_id)} — ${tName(j.fora_id)}`, `${cn(c)} · ${j.jornada_nome || ""} · ${fmtD(j.data)} ${j.hora || ""}`) + `<section style="padding-top:36px"><div class="wrap">
     <div class="score-hero rink">${big(j.casa_id)}<div><div class="lbl" style="color:#8A857C">${j.golos_casa == null ? esc(fmtD(j.data).toUpperCase()) : j.estado === "provisorio" ? "PROVISÓRIO" : "FINAL"}</div><div class="big">${score(j) || esc(j.hora || "vs")}</div>${j.canal_tv || j.tv_url ? `<a class="lbl" style="color:#FFC94D" href="${esc(j.tv_url || "#/onde-ver")}" target="_blank">▶ ${esc(j.canal_tv || "FPP TV")}</a>` : ""}</div>${big(j.fora_id)}</div>
@@ -386,15 +394,24 @@ async function players(plantel) {
 
 async function pClubes() {
   const ativos = new Set(B.comps.map(c => c.id));
-  const cl = [...B.clubes.values()].filter(c => [...B.equipas.values()].some(e => e.clube_id === c.id && ativos.has(e.competicao_id))).sort((a, b) => clubName(a).localeCompare(clubName(b)));
-  const compOf = c => [...B.equipas.values()].filter(e => e.clube_id === c.id).map(e => cn(compById(e.competicao_id))).filter(Boolean);
-  return { html: hd([["Clubes"]], "Clubes", "Plantéis, jogos e notícias de cada clube.") + `<section style="padding-top:36px"><div class="wrap"><div class="tools"><input class="input" id="cq" placeholder="Procurar clube ou cidade"></div><div class="clubgrid">${cl.map(c => `<a class="club" href="#/clube/${c.id}">${crestC(c, 62, "cr")}<div><h3>${esc(clubName(c))}</h3><small>${esc([(c.cidade || ""), compOf(c)[0] || ""].filter(Boolean).join(" · ").toUpperCase())}</small></div></a>`).join("") || empty("Ainda sem clubes. O robô preenche esta lista na primeira execução.")}</div></div></section>`,
+  const grupos = new Map();
+  for (const e of B.equipas.values()) {
+    if (!ativos.has(e.competicao_id)) continue;
+    const k = teamKey(e.id); if (!k) continue;
+    const g = grupos.get(k) || { k, eid: e.id, comps: [] }; g.comps.push(compById(e.competicao_id)); grupos.set(k, g);
+  }
+  const l = [...grupos.values()].map(g => ({ ...g, nome: teamLabel(g.eid), c: clubOfTeam(g.eid) })).sort((a, b) => a.nome.localeCompare(b.nome));
+  return { html: hd([["Clubes"]], "Clubes e equipas", "Plantéis, jogos e notícias de cada equipa.") + `<section style="padding-top:36px"><div class="wrap"><div class="tools"><input class="input" id="cq" placeholder="Procurar equipa ou cidade"></div><div class="clubgrid">${l.map(g => `<a class="club" href="#/clube/${g.k}">${crest(g.eid, 62).replace('class="crest', 'class="cr crest')}<div><h3>${esc(g.nome)}</h3><small>${esc([(g.c?.cidade || ""), cn(g.comps.sort((x, y) => (x.ordem ?? 100) - (y.ordem ?? 100))[0])].filter(Boolean).join(" · ").toUpperCase())}</small></div></a>`).join("") || empty("Ainda sem equipas. O robô preenche esta lista na primeira execução.")}</div></div></section>`,
     after: () => { $("#cq").oninput = e => document.querySelectorAll(".club").forEach(c => c.style.display = norm(c.textContent).includes(norm(e.target.value)) ? "" : "none"); } };
 }
 async function pClube(id, tab) {
-  const c = B.clubes.get(+id); if (!c) return { html: hd([["Clubes", "#/clubes"]], "Clube não encontrado") };
+  const chave = String(id || "");
+  const eqs = eqsDaChave(chave).filter(e => compById(e.competicao_id)).sort((a, b) => (compById(a.competicao_id).ordem - compById(b.competicao_id).ordem));
+  const c = eqs.length ? (clubOfTeam(eqs[0].id) || { id: null, nome: eqs[0].nome }) : B.clubes.get(+chave);
+  if (!c) return { html: hd([["Clubes", "#/clubes"]], "Equipa não encontrada") };
+  const nomeEq = eqs.length ? teamLabel(eqs[0].id) : clubName(c);
+  const outras = c.id ? [...new Set([...B.equipas.values()].filter(e => e.clube_id === c.id && compById(e.competicao_id)).map(e => teamKey(e.id)))].filter(k => k !== chave) : [];
   tab = +tab || 0;
-  const eqs = [...B.equipas.values()].filter(e => e.clube_id === c.id && compById(e.competicao_id)).sort((a, b) => (compById(a.competicao_id).ordem - compById(b.competicao_id).ordem));
   const eids = eqs.map(e => e.id);
   let body = "", after;
   if (tab === 0) {
@@ -415,12 +432,12 @@ async function pClube(id, tab) {
     const [a, b] = eids.length ? await Promise.all([q("jogos", { in: { casa_id: eids } }), q("jogos", { in: { fora_id: eids } })]) : [[], []];
     body = [...a, ...b].sort((x, y) => (x.data || "9").localeCompare(y.data || "9")).map(j => matchRow(j)).join("") || empty("Sem jogos.");
   } else {
-    const [m1, m2] = await Promise.all([q("mercado", { eq: { para_clube: c.id } }), q("mercado", { eq: { de_clube: c.id } })]);
+    const [m1, m2] = c.id ? await Promise.all([q("mercado", { eq: { para_clube: c.id } }), q("mercado", { eq: { de_clube: c.id } })]) : [[], []];
     const all = Object.values(Object.fromEntries([...m1, ...m2].map(m => [m.id, m]))).sort((a, b) => (b.data || "").localeCompare(a.data || ""));
     const news = (await q("noticias", { order: [["publicado_em", false]], limit: 60 })).filter(n => (n.clubes || []).includes(c.id));
     body = (all.map(trRow).join("") || empty("Sem movimentos de mercado.")) + (news.length ? `<div style="margin-top:36px">${sh("+", "Notícias")}<div class="grid g4">${news.slice(0, 8).map(nc).join("")}</div></div>` : "");
   }
-  return { html: `<div class="phd">${RINK}<div class="wrap" style="position:relative"><div class="crumbs"><a href="#/">Início</a> / <a href="#/clubes">Clubes</a> / ${esc(clubName(c))}</div><div class="clubhero">${crestC(c, 120, "cr")}<div><h1 class="x">${esc(clubName(c))}</h1><p>${esc([c.cidade, ...eqs.map(e => cn(compById(e.competicao_id)))].filter(Boolean).join(" · "))}</p></div></div><div class="tabs">${["Resumo", "Plantel", "Jogos", "Mercado e notícias"].map((x, k) => `<a class="tb ${k === tab ? "on" : ""}" href="#/clube/${c.id}/${k}">${x}</a>`).join("")}</div></div></div><section style="padding-top:36px"><div class="wrap">${body}</div></section>`, after };
+  return { html: `<div class="phd">${RINK}<div class="wrap" style="position:relative"><div class="crumbs"><a href="#/">Início</a> / <a href="#/clubes">Clubes</a> / ${esc(nomeEq)}</div><div class="clubhero">${crestC(c, 120, "cr")}<div><h1 class="x">${esc(nomeEq)}</h1><p>${esc([c.cidade, ...new Set(eqs.map(e => cn(compById(e.competicao_id))))].filter(Boolean).join(" · "))}</p>${outras.length ? `<p style="margin-top:8px">${outras.map(k => `<a class="chip" style="display:inline-flex;margin-right:6px" href="#/clube/${k}">${esc(teamLabel(eqsDaChave(k)[0]?.id))} →</a>`).join("")}</p>` : ""}</div></div><div class="tabs">${["Resumo", "Plantel", "Jogos", "Mercado e notícias"].map((x, k) => `<a class="tb ${k === tab ? "on" : ""}" href="#/clube/${chave}/${k}">${x}</a>`).join("")}</div></div></div><section style="padding-top:36px"><div class="wrap">${body}</div></section>`, after };
 }
 async function pJogador(id) {
   const p = (await q("jogadores", { eq: { id: +id } }))[0];
@@ -432,7 +449,7 @@ async function pJogador(id) {
   return { html: hd([["Clubes", "#/clubes"], ...(c ? [[clubName(c), "#/clube/" + c.id]] : []), [pName(p)]], pName(p), [p.posicao, c && clubName(c)].filter(Boolean).join(" · ")) + `<section style="padding-top:36px"><div class="wrap grid g2 jog-grid">
     <div>${pFoto(p) ? img(pFoto(p), pName(p), "rink").replace('class="imgbox', 'style="aspect-ratio:3/4" class="imgbox') : `<div class="imgbox err rink" style="aspect-ratio:3/4"></div>`}</div>
     <div><div class="grid g3" style="margin-bottom:28px">${[["Número", pNum(p) ?? "—"], ["Posição", p.posicao || "—"], ["Golos", mk.reduce((s, m) => s + (m.golos || 0), 0) || pl.reduce((s, x) => s + (x.golos || 0), 0)], ...(p.nacionalidade ? [["Nacionalidade", p.nacionalidade]] : []), ...(idade ? [["Idade", idade + " anos"]] : [])].map(s => `<div class="box rink-r"><span class="lbl">${s[0]}</span><div class="x" style="font-size:30px;margin-top:8px;color:var(--red)">${esc(s[1])}</div></div>`).join("")}</div>
-    ${p.bio ? `<div class="article">${para(p.bio)}</div>` : ""}${eq.length ? `<h3 class="x" style="font-size:24px;margin:20px 0 10px">Equipas</h3>${eq.map(e => `<a class="doc" href="#/clube/${e.clube_id}"><span class="d">${esc(cn(compById(e.competicao_id)))}</span><b>${esc(tName(e.id))}</b><span></span></a>`).join("")}` : ""}</div></div></section>` };
+    ${p.bio ? `<div class="article">${para(p.bio)}</div>` : ""}${eq.length ? `<h3 class="x" style="font-size:24px;margin:20px 0 10px">Equipas</h3>${eq.map(e => `<a class="doc" href="#/clube/${teamKey(e.id)}"><span class="d">${esc(cn(compById(e.competicao_id)))}</span><b>${esc(tName(e.id))}</b><span></span></a>`).join("")}` : ""}</div></div></section>` };
 }
 
 async function pMercado() {
