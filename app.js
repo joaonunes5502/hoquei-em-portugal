@@ -4,7 +4,8 @@
    ===================================================================== */
 const CFG = window.HP_CONFIG || {};
 const LIVE = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
-const sb = LIVE ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+const SB_URL = (String(CFG.SUPABASE_URL || "").trim().match(/^https?:\/\/[^/]+/) || [""])[0];
+const sb = LIVE ? window.supabase.createClient(SB_URL, CFG.SUPABASE_ANON_KEY) : null;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -63,10 +64,11 @@ async function loadBase() {
 const principal = () => B.comps.find(c => c.principal) || B.comps[0];
 const compById = id => B.comps.find(c => c.id === id);
 const cn = c => c ? (c.nome_curto || c.nome) : "";
-const clean = n => String(n || "").split(/\s*\/\s*/)[0].replace(/\s+SAD$/i, "").trim();
+const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
+const sufixo = n => (clean(n).match(/\s([B-D])$/) || [])[1];
 const clubOfTeam = eid => B.clubes.get(B.equipas.get(eid)?.clube_id);
-const clubName = c => c ? (c.nome_curto || clean(c.nome)) : "";
-const tName = eid => { const c = clubOfTeam(eid); return c ? clubName(c) : clean(B.equipas.get(eid)?.nome) || "—"; };
+const clubName = c => c ? (c.nome_curto || clean(c.nome).replace(/\s[B-D]$/, "")) : "";
+const tName = eid => { const e = B.equipas.get(eid), c = clubOfTeam(eid); if (!e) return "—"; const s = sufixo(e.nome); return c?.nome_curto ? c.nome_curto + (s ? " " + s : "") : clean(e.nome); };
 const ini = n => clean(n).replace(/^(FC|SL|CP|OC|UD|HC|AD|CD|AA|SC|AJ|GD|CA)\s+/i, "").split(/\s+/).map(w => w[0]).join("").slice(0, 3).toUpperCase();
 function crestC(c, size = 28, cls = "crest") {
   const logo = c && (c.logo_custom || c.logo_url);

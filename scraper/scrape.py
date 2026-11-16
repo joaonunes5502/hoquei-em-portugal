@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 
 BASE = "https://hp.fpp.pt"
 DELAY = float(os.environ.get("SCRAPER_DELAY", "0.6"))   # pausa entre pedidos ao fpp.pt
-MAX_BACKFILL = int(os.environ.get("SCRAPER_BACKFILL", "25"))  # jogos antigos sem detalhes por execução
+MAX_BACKFILL = int(os.environ.get("SCRAPER_BACKFILL", "40"))  # jogos antigos sem detalhes por execução
 TZ_PT = ZoneInfo("Europe/Lisbon")  # só serve para saber o que é "hoje"
 
 RE_EQUIPA = re.compile(r"/Equipa/(\d+)/(\d+)")
@@ -31,6 +31,11 @@ RE_TEMPO = re.compile(r"(\d{1,2}:\d{2})")
 
 def txt(el):
     return re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip() if el else ""
+
+
+def base_clube(n):
+    """'J. Pacense "B"' -> 'J. Pacense' (o clube é o mesmo da equipa principal)"""
+    return re.sub(r'\s+["“”\']?[B-D]["“”\']?\s*$', "", (n or "").strip())
 
 
 def to_int(s):
@@ -285,7 +290,9 @@ def parse_estatisticas(h):
 # ======================================================================
 class DB:
     def __init__(self, url, key):
-        self.url = url.rstrip("/") + "/rest/v1"
+        # aceita o URL com ou sem "/rest/v1" ou outros caminhos no fim: fica só https://xxxx.supabase.co
+        m = re.match(r"(https?://[^/]+)", url.strip())
+        self.url = (m.group(1) if m else url.rstrip("/")) + "/rest/v1"
         # chaves novas (sb_secret_...) vão só no cabeçalho "apikey"; as antigas (service_role, JWT) também no Authorization
         self.h = {"apikey": key, "Content-Type": "application/json"}
         if not key.startswith("sb_"):
@@ -295,6 +302,14 @@ class DB:
         rows = [r for r in rows if r]
         if not rows:
             return
+        # a mesma chave não pode aparecer duas vezes no mesmo pedido (ex.: clube com equipa A e B) -> juntar
+        if on_conflict:
+            keys = on_conflict.split(",")
+            merged = {}
+            for r in rows:
+                k = tuple(r.get(x) for x in keys)
+                merged[k] = {**merged.get(k, {}), **{a: b for a, b in r.items() if b is not None or a not in merged.get(k, {})}}
+            rows = list(merged.values())
         # todas as linhas de um pedido têm de ter as mesmas colunas
         groups = {}
         for r in rows:
@@ -331,11 +346,16 @@ class Robo:
         self.hoje = datetime.now(TZ_PT).date()
 
     def get(self, path, params=None):
-        time.sleep(DELAY)
-        self.pedidos += 1
-        r = self.s.get(BASE + path, params=params, timeout=30)
-        r.raise_for_status()
-        return r.content.decode("utf-8", errors="replace")
+        for tentativa in range(3):  # o fpp.pt às vezes corta a ligação: tentar outra vez
+            time.sleep(DELAY * (1 + 3 * tentativa))
+            self.pedidos += 1
+            try:
+                r = self.s.get(BASE + path, params=params, timeout=30)
+                r.raise_for_status()
+                return r.content.decode("utf-8", errors="replace")
+            except requests.RequestException:
+                if tentativa == 2:
+                    raise
 
     # ---------- descoberta ----------
     def descobrir(self):
@@ -361,14 +381,14 @@ class Robo:
         self.db.upsert("jogos", jogos, "id")
 
         cls = parse_classificacao(self.get(f"/Classificacao/{cid}"))
-        self.db.upsert("clubes", [{"id": r["clube_id"], "nome": r["nome"], "logo_url": r["logo_url"]} for r in cls if r["clube_id"]], "id")
+        self.db.upsert("clubes", [{"id": r["clube_id"], "nome": base_clube(r["nome"]), "logo_url": r["logo_url"]} for r in cls if r["clube_id"]], "id")
         self.db.upsert("equipas", [{"id": r["equipa_id"], "competicao_id": cid, "nome": r["nome"], "clube_id": r["clube_id"]} for r in cls], "id")
         if cls:
             self.db.delete("classificacao", f"competicao_id=eq.{cid}")
             self.db.upsert("classificacao", [{k: r[k] for k in ("pos", "equipa_id", "pts", "j", "v", "e", "d", "gm", "gs", "dg")} | {"competicao_id": cid} for r in cls])
 
         mk = parse_marcadores(self.get(f"/Marcadores/{cid}"))
-        self.db.upsert("clubes", [{"id": m["clube_id"], "nome": m["clube_nome"], "logo_url": m["clube_logo"]} for m in mk if m["clube_id"]], "id")
+        self.db.upsert("clubes", [{"id": m["clube_id"], "nome": base_clube(m["clube_nome"]), "logo_url": m["clube_logo"]} for m in mk if m["clube_id"]], "id")
         self.db.upsert("jogadores", [{"id": m["jogador_id"], "nome": m["nome"], "foto_url": m["foto_url"]} for m in mk], "id")
         if mk:
             self.db.delete("marcadores", f"competicao_id=eq.{cid}")
@@ -387,7 +407,7 @@ class Robo:
 
         for eid, clube_id, logo, nome in info["logos"]:
             if clube_id:
-                self.db.upsert("clubes", [{"id": clube_id, "nome": nome, "logo_url": logo}], "id")
+                self.db.upsert("clubes", [{"id": clube_id, "nome": base_clube(nome), "logo_url": logo}], "id")
                 self.db.upsert("equipas", [{"id": eid, "nome": nome, "clube_id": clube_id}], "id")
 
         for lado, equipa_id in zip(("casa", "fora"), (j["casa_id"], j["fora_id"])):
@@ -414,7 +434,7 @@ class Robo:
     def equipa(self, cid, eid):
         e = parse_equipa(self.get(f"/Equipa/{cid}/{eid}"))
         if e["clube_id"]:
-            self.db.upsert("clubes", [{"id": e["clube_id"], "nome": e["nome"] or str(e["clube_id"]), "logo_url": e["logo_url"]}], "id")
+            self.db.upsert("clubes", [{"id": e["clube_id"], "nome": base_clube(e["nome"]) or str(e["clube_id"]), "logo_url": e["logo_url"]}], "id")
         self.db.upsert("equipas", [{"id": eid, "competicao_id": cid, "nome": e["nome"] or str(eid), "clube_id": e["clube_id"],
                                     "plantel_em": datetime.now(timezone.utc).isoformat(), **e["stats"]}], "id")
         self.db.upsert("jogadores", [{"id": p["id"], "nome": p["nome"], "foto_url": p["foto_url"]} for p in e["jogadores"]], "id")
@@ -433,12 +453,15 @@ class Robo:
             if r:
                 todos += r
 
-        # detalhes: jogos de ontem/hoje com resultado + jogos antigos ainda sem detalhes
-        ontem = (self.hoje - timedelta(days=1)).isoformat()
-        recentes = [j for j in todos if j["data"] and j["data"] >= ontem and j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
-        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={MAX_BACKFILL}")
+        # detalhes: jogos dos últimos 3 dias (resultados podem ser corrigidos) + todos os que ainda não têm detalhes
+        desde = (self.hoje - timedelta(days=3)).isoformat()
+        recentes = [j for j in todos if j["data"] and desde <= j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
+        limite = 2000 if modo == "completo" else MAX_BACKFILL
+        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
         ids = {j["id"] for j in recentes}
-        for j in recentes + [x for x in sem if x["id"] not in ids]:
+        fila = recentes + [x for x in sem if x["id"] not in ids]
+        print(f"Detalhes de {len(fila)} jogos")
+        for j in fila:
             self.tentar(f"jogo {j['id']}", self.jogo, j)
 
         if modo == "completo":

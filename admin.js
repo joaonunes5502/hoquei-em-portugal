@@ -6,7 +6,7 @@ const LIVE = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const norm = s => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-const clean = n => String(n || "").split(/\s*\/\s*/)[0].replace(/\s+SAD$/i, "").trim();
+const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
 const slugify = s => norm(s).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 function toast(msg, bad) { const t = $("#toast"); t.textContent = msg; t.className = "show" + (bad ? " bad" : ""); clearTimeout(t._t); t._t = setTimeout(() => t.className = "", 3200); }
 
@@ -51,7 +51,8 @@ function fakeClient(data) {
     }
   };
 }
-const sb = LIVE ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : fakeClient(JSON.parse(JSON.stringify(window.HP_DEMO || {})));
+const SB_URL = (String(CFG.SUPABASE_URL || "").trim().match(/^https?:\/\/[^/]+/) || [""])[0];
+const sb = LIVE ? window.supabase.createClient(SB_URL, CFG.SUPABASE_ANON_KEY) : fakeClient(JSON.parse(JSON.stringify(window.HP_DEMO || {})));
 
 async function all(table, mod = x => x) { const { data, error } = await mod(sb.from(table).select("*")); if (error) { toast(error.message, 1); return []; } return data || []; }
 async function save(table, row, conflict) {
@@ -73,11 +74,11 @@ async function loadSupport() {
   [D.comps, D.clubes, D.equipas] = await Promise.all([all("competicoes", x => x.order("ordem").order("id")), all("clubes"), all("equipas")]);
   D.clubes.sort((a, b) => clubName(a).localeCompare(clubName(b)));
 }
-const clubName = c => c ? (c.nome_curto || clean(c.nome)) : "—";
+const clubName = c => c ? (c.nome_curto || clean(c.nome).replace(/\s[B-D]$/, "")) : "—";
 const club = id => D.clubes.find(c => c.id === +id);
 const comp = id => D.comps.find(c => c.id === +id);
 const cn = c => c ? (c.nome_curto || c.nome) : "—";
-const teamName = eid => { const e = D.equipas.find(x => x.id === eid); return e ? (club(e.clube_id) ? clubName(club(e.clube_id)) : clean(e.nome)) : "—"; };
+const teamName = eid => { const e = D.equipas.find(x => x.id === eid); if (!e) return "—"; const c = club(e.clube_id), s = (clean(e.nome).match(/\s([B-D])$/) || [])[1]; return c?.nome_curto ? c.nome_curto + (s ? " " + s : "") : clean(e.nome); };
 const optClubes = (sel, empty = true) => (empty ? `<option value="">—</option>` : "") + D.clubes.map(c => `<option value="${c.id}" ${+sel === c.id ? "selected" : ""}>${esc(clubName(c))}</option>`).join("");
 const optComps = (sel, empty = true) => (empty ? `<option value="">—</option>` : "") + D.comps.map(c => `<option value="${c.id}" ${+sel === c.id ? "selected" : ""}>${esc(cn(c))}</option>`).join("");
 
