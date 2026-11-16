@@ -225,7 +225,7 @@ function buildMenu() {
   $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(pn(c))}</a>`).join("")}</div>
   <div>${sm("Mais competições", compsMais().filter(c => !europeia(c)).map(c => [pn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}${compsMais().some(europeia) ? sm("Europa", compsMais().filter(europeia).map(c => [pn(c), "#/competicao/" + c.id])) : ""}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
-  <div>${sm("A tua app", [["❓ Como usar", "#/ajuda"], ["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
+  <div>${sm("A tua app", (recAtivo() ? [["👤 A minha conta", "#/conta"], ["🏆 Ranking", "#/ranking"], ["🎁 Loja", "#/loja"]] : []).concat([["❓ Como usar", "#/ajuda"], ["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]]))}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
   $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(pn(c))}</a>`).join("");
 }
 function openMenu() { $("#menu").classList.add("open"); document.body.style.overflow = "hidden"; setTimeout(() => $("#q").focus(), 50); }
@@ -547,7 +547,10 @@ const PRIVACIDADE = `**Quem somos.** O Hóquei em Português é um projeto indep
 
 **Patrocinadores.** Os banners de patrocinadores são imagens nossas; contamos apenas quantas vezes são vistos e clicados, sem identificar quem.
 
-**Os teus direitos (RGPD).** Podes pedir para ver, corrigir ou apagar os teus dados, ou cancelar a newsletter a qualquer momento, através do formulário de contacto. Também podes apresentar queixa à CNPD (cnpd.pt).`;
+**Os teus direitos (RGPD).** Podes pedir para ver, corrigir ou apagar os teus dados, ou cancelar a newsletter a qualquer momento, através do formulário de contacto. Também podes apresentar queixa à CNPD (cnpd.pt).
+
+**Contas, palpites e loja**
+Criar conta é opcional. Se criares, guardamos o teu email (para entrares e para te contactarmos sobre prémios que resgates), o nome que escolheres para o ranking, os teus palpites, os teus pontos e os teus pedidos da loja. O ranking é público e mostra apenas o nome que escolheste e os pontos, nunca o email. Podes apagar a conta e todos estes dados a qualquer momento em “A minha conta”. Os pontos não têm valor em dinheiro e não podem ser comprados nem vendidos.`;
 async function pPrivacidade() {
   const t = B.defs.privacidade?.texto || PRIVACIDADE;
   return { html: hd([["Privacidade"]], "Privacidade e cookies") + `<section style="padding-top:36px"><div class="wrap"><div class="article">${para(t)}<p class="note">Última atualização: ${esc(B.defs.privacidade?.atualizado || "novembro de 2026")}</p></div></div></section>` };
@@ -659,7 +662,7 @@ async function go(path) {
   cur = path || "/";
   try { if (location.hash !== "#" + cur) history.replaceState(null, "", "#" + cur); } catch (e) { }
   const p = cur.replace(/^\//, "").split("/").map(decodeURIComponent);
-  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade, notificacoes: pSeguir };
+  const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, conta: pConta, ranking: pRanking, loja: pLoja, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade, notificacoes: pSeguir };
   const top = { competicao: "comp", jogo: "comp", noticias: "news", noticia: "news", clubes: "clubs", clube: "clubs", jogador: "clubs", mercado: "mkt", "onde-ver": "tv" }[p[0]] || "";
   closeMenu();
   temaRota(p);
@@ -667,7 +670,7 @@ async function go(path) {
   try {
     const r = await (R[p[0]] || pHome)(p[1], p[2]);
     if (cur !== (path || "/")) return; // utilizador já navegou para outra página
-    $("#app").innerHTML = r.html; r.after && r.after(); afterSponsors($("#app")); if (!/^\/notificacoes/.test(cur)) ligarSeguir($("#app"));
+    $("#app").innerHTML = r.html; r.after && r.after(); recompensasNaPagina(p); afterSponsors($("#app")); if (!/^\/notificacoes/.test(cur)) ligarSeguir($("#app"));
   } catch (e) { console.error(e); $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px">${empty("Ocorreu um erro a carregar esta página.")}</div>`; }
   document.querySelectorAll("#quick a, .tabbar a").forEach(a => a.classList.toggle("on", a.dataset.k === (top || (p[0] === "" ? "home" : ""))));
   window.scrollTo(0, 0);
@@ -686,6 +689,7 @@ function setTheme(t) { document.documentElement.dataset.theme = t; if (temaAtual
   let t; $("#q").oninput = e => { clearTimeout(t); t = setTimeout(() => search(e.target.value), 250); };
   if (!LIVE) $("#demo").style.display = "block";
   await loadBase();
+  await iniciarContas().catch(e => console.error(e));
   buildMenu(); board(); loadAdsense();
   $("#spBar").innerHTML = sponsor("rodape"); afterSponsors($("#spBar"));
   $("#gerirCookies").onclick = e => { e.preventDefault(); gerirCookies(); };
@@ -694,6 +698,206 @@ function setTheme(t) { document.documentElement.dataset.theme = t; if (temaAtual
   // atualiza o placar e a página do jogo de 2 em 2 minutos (o robô corre de 10 em 10)
   setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "") && !visitaAtiva) go(cur); }, 120000);
 })();
+
+/* ---------------- contas, palpites, ranking e loja ----------------
+   Os pontos são sempre calculados na base de dados (funções do Supabase); o site só pede e mostra. */
+const recAtivo = () => !!B.defs.recompensas && B.defs.recompensas.ativo !== false;
+const REC = (k, d) => { const v = (B.defs.recompensas || {})[k]; return v == null ? d : v; };
+let EU = null, recuperar = false;
+const pts = n => `${n > 0 ? "+" : ""}${n}`;
+// hora de início do jogo (as horas do site são de Portugal continental)
+function inicioJogo(j) {
+  if (!j || !j.data) return null;
+  const [h, m] = (j.hora || "00:00").split(":").map(Number), [Y, M, D] = j.data.split("-").map(Number);
+  const utc = Date.UTC(Y, M - 1, D, h || 0, m || 0);
+  const lis = new Date(new Date(utc).toLocaleString("en-US", { timeZone: "Europe/Lisbon" })), ref = new Date(new Date(utc).toLocaleString("en-US", { timeZone: "UTC" }));
+  return new Date(utc - (lis - ref));
+}
+const palpiteAberto = j => j && j.golos_casa == null && (j.estado || "agendado") === "agendado" && j.data && inicioJogo(j) > new Date();
+const emDireto = j => { if (!j || !j.data || j.estado === "final") return false; const k = inicioJogo(j), ag = new Date(); return (j.estado === "provisorio" || (j.hora && k <= ag)) && ag - k < 150 * 60000 + (j.hora ? 0 : 864e5); };
+
+/* --- ligação aos dados: Supabase a sério, ou uma imitação em memória no modo demonstração --- */
+const DM = { u: null, palpites: [], movimentos: [], pedidos: [], seq: 1 };
+const erroPT = m => ({ "Invalid login credentials": "Email ou palavra-passe errados.", "Email not confirmed": "Ainda não confirmaste o email. Procura a mensagem que te enviámos.", "User already registered": "Já existe uma conta com este email." }[m] || (/at least 6/.test(m) ? "A palavra-passe tem de ter pelo menos 6 caracteres." : /rate limit/i.test(m) ? "Demasiadas tentativas. Espera uns minutos e tenta outra vez." : m));
+const R = {
+  async rpc(fn, args) {
+    if (LIVE) { const { data, error } = await sb.rpc(fn, args || {}); if (error) throw new Error(erroPT(error.message)); return data; }
+    const u = DM.u; if (!u) throw new Error("Tens de entrar na tua conta.");
+    const mov = (p, motivo, ref, descricao, rank = true) => { if (DM.movimentos.some(x => x.motivo === motivo && x.ref === ref)) return false; DM.movimentos.unshift({ id: DM.seq++, pontos: p, motivo, ref, descricao, criado_em: new Date().toISOString() }); u.pontos = Math.max(0, u.pontos + p); if (rank) u.total += p; return true; };
+    if (fn === "palpitar") { const j = (await q("jogos", { eq: { id: args.p_jogo } }))[0]; if (!palpiteAberto(j)) throw new Error("Os palpites deste jogo já fecharam."); DM.palpites = DM.palpites.filter(x => x.jogo_id !== j.id).concat({ jogo_id: j.id, escolha: args.p_escolha, resolvido: false, pontos: null, criado_em: new Date().toISOString() }); return; }
+    if (fn === "retirar_palpite") { DM.palpites = DM.palpites.filter(x => x.jogo_id !== args.p_jogo); return; }
+    if (fn === "ponto_direto") return mov(REC("direto", 1), "direto", String(args.p_jogo), "Jogo em direto") ? REC("direto", 1) : 0;
+    if (fn === "definir_nome") { u.nome = args.p_nome.trim().slice(0, 30); return; }
+    if (fn === "minha_posicao") return 1 + DEMO_RANK.filter(x => x.total > u.total).length;
+    if (fn === "resgatar") { const i = (window.HP_DEMO.loja_itens || []).find(x => x.id === args.p_item); if (!i) throw new Error("Este artigo já não está disponível."); if (i.stock != null && i.stock <= 0) throw new Error("Este artigo esgotou."); if (u.pontos < i.custo) throw new Error(`Não tens pontos suficientes (tens ${u.pontos}, precisas de ${i.custo}).`); if (i.stock != null) i.stock--; const id = "p" + DM.seq++; DM.pedidos.unshift({ id, item_nome: i.nome, custo: i.custo, estado: "pendente", contacto: args.p_contacto, criado_em: new Date().toISOString() }); mov(-i.custo, "loja", id, i.nome, false); return id; }
+    if (fn === "apagar_conta") { DM.u = null; DM.palpites = []; DM.movimentos = []; DM.pedidos = []; return; }
+  },
+  async meus(tabela, mod) {
+    if (!EU) return [];
+    if (LIVE) { const { data, error } = await mod(sb.from(tabela).select("*").eq("user_id", EU.id)); if (error) throw new Error(error.message); return data || []; }
+    return { palpites: DM.palpites, movimentos: DM.movimentos, loja_pedidos: DM.pedidos }[tabela] || [];
+  },
+  async ranking() { if (LIVE) { const { data } = await sb.from("perfis").select("id,nome,total,certos,errados").order("total", { ascending: false }).order("criado_em").limit(50); return data || []; } return DEMO_RANK.concat(DM.u ? [{ ...DM.u }] : []).sort((a, b) => b.total - a.total); },
+  async itens() { if (LIVE) { const { data } = await sb.from("loja_itens").select("*").eq("ativo", true).order("ordem").order("custo"); return data || []; } return (window.HP_DEMO.loja_itens || []).filter(i => i.ativo !== false); }
+};
+const DEMO_RANK = [["Rita M.", 148, 17, 3], ["hoquista_pt", 121, 15, 4], ["Tiago Carvalho", 96, 12, 4], ["PacenseSempre", 71, 10, 5], ["Marta", 44, 6, 3], ["Zé do Rinque", 12, 4, 4], ["Nuno F.", -9, 1, 3]].map((x, i) => ({ id: "d" + i, nome: x[0], total: x[1], certos: x[2], errados: x[3] }));
+
+async function carregarEu() {
+  if (LIVE) {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) EU = null;
+    else { const { data } = await sb.from("perfis").select("*").eq("id", session.user.id).maybeSingle(); EU = { nome: (session.user.email || "Adepto").split("@")[0], pontos: 0, total: 0, certos: 0, errados: 0, ...(data || {}), id: session.user.id, email: session.user.email }; }
+  } else EU = DM.u;
+  pintarConta();
+  return EU;
+}
+function pintarConta() {
+  if (!recAtivo()) return;
+  let b = $("#contaBtn");
+  if (!b) { b = document.createElement("a"); b.id = "contaBtn"; b.href = "#/conta"; $("#themeBtn").before(b); }
+  b.className = "hbtn " + (EU ? "pontos" : "circ"); b.setAttribute("aria-label", EU ? `A minha conta: ${EU.pontos} pontos` : "Entrar ou criar conta");
+  b.innerHTML = EU ? `<b>${EU.pontos}</b><small>pts</small>` : `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>`;
+}
+async function ganhou(n, texto) { if (n) { await carregarEu(); toast(`${pts(n)} ${Math.abs(n) === 1 ? "ponto" : "pontos"} · ${texto}`); } }
+
+/* --- palpite na página do jogo --- */
+async function montarPalpite(id) {
+  if (!recAtivo()) return;
+  const j = (await q("jogos", { eq: { id: +id } }))[0], alvo = $("#app .seguir-jogo") || $("#app .score-hero");
+  if (!j || !alvo || cur !== "/jogo/" + id) return;
+  if (EU && emDireto(j)) R.rpc("ponto_direto", { p_jogo: j.id }).then(n => ganhou(n, "abriste um jogo em direto")).catch(() => { });
+  const meu = EU ? (await R.meus("palpites", x => x.eq("jogo_id", j.id)).catch(() => [])).find(p => p.jogo_id === j.id) : null;
+  const aberto = palpiteAberto(j);
+  if (!aberto && !meu) return;
+  $("#palp")?.remove();
+  const ops = [["1", tName(j.casa_id)], ["X", "Empate"], ["2", tName(j.fora_id)]];
+  const nomeEsc = e => esc(ops.find(o => o[0] === e)[1]);
+  let corpo;
+  if (aberto) corpo = `<div class="palp-ops">${ops.map(([v, n]) => `<button class="${meu && meu.escolha === v ? "on" : ""}" data-p="${v}"><small>${v === "X" ? "X" : v === "1" ? "Casa" : "Fora"}</small><b>${esc(n)}</b></button>`).join("")}</div>
+      <p class="palp-nota">${meu ? `O teu palpite: <b>${nomeEsc(meu.escolha)}</b>. Podes mudar até o jogo começar. <a href="#" data-p="0">Retirar</a>` : EU ? `Acertas: <b>${pts(REC("acerto", 10))}</b> · Falhas: <b>${pts(-REC("erro", 7))}</b> · Fecha quando o jogo começar.` : `Acertas: <b>${pts(REC("acerto", 10))}</b> · Falhas: <b>${pts(-REC("erro", 7))}</b>. <a href="#/conta">Entra ou cria conta</a> para jogar.`}</p>`;
+  else corpo = `<p class="palp-nota">O teu palpite: <b>${nomeEsc(meu.escolha)}</b> · ${meu.resolvido ? (meu.pontos > 0 ? `<span class="ok">Acertaste! ${pts(meu.pontos)} pontos</span>` : meu.pontos < 0 ? `<span class="ko">Falhaste. ${pts(meu.pontos)} pontos</span>` : "Não contou (foi feito depois do início).") : "à espera do resultado final."}</p>`;
+  alvo.insertAdjacentHTML("afterend", `<div id="palp" class="palp rink-r"><div class="palp-h"><span class="lbl">Palpite</span><h3 class="x">Quem ganha?</h3></div>${corpo}</div>`);
+  $("#palp").onclick = async e => {
+    const b = e.target.closest("[data-p]"); if (!b) return; e.preventDefault();
+    if (!EU) { sessionStorage.hpVoltar = cur; return go("/conta"); }
+    try { if (b.dataset.p === "0") await R.rpc("retirar_palpite", { p_jogo: j.id }); else { await R.rpc("palpitar", { p_jogo: j.id, p_escolha: b.dataset.p }); toast("Palpite guardado ✓"); } } catch (er) { toast(er.message); }
+    montarPalpite(id);
+  };
+}
+
+/* --- páginas --- */
+const regras = () => `<ul class="regras"><li><b>${pts(REC("acerto", 10))}</b> por cada palpite certo (vitória da casa, empate ou vitória de fora)</li><li><b>${pts(-REC("erro", 7))}</b> por cada palpite errado</li>${REC("direto", 1) > 0 ? `<li><b>${pts(REC("direto", 1))}</b> por abrires um jogo enquanto está a decorrer</li>` : ""}<li>Os pontos trocam-se por prémios na <a href="#/loja">loja</a></li></ul>`;
+async function pConta() {
+  if (!recAtivo()) return { html: hd([["Conta"]], "Conta") + `<section><div class="wrap">${empty("As contas ainda não estão disponíveis.")}</div></section>` };
+  await carregarEu();
+  if (recuperar && EU) return { html: hd([["Conta"]], "Nova palavra-passe") + `<section style="padding-top:36px"><div class="wrap"><form class="conta-form" id="fNova"><label>Nova palavra-passe<input class="input" type="password" name="p" minlength="6" required autocomplete="new-password"></label><button class="btn">Guardar</button></form></div></section>`,
+    after: () => { $("#fNova").onsubmit = async e => { e.preventDefault(); const { error } = await sb.auth.updateUser({ password: e.target.p.value }); if (error) return toast(erroPT(error.message)); recuperar = false; toast("Palavra-passe alterada ✓"); go("/conta"); }; } };
+  if (!EU && !(CFG.LOGIN_EMAIL && LIVE)) {
+    // entrada só com Google (sem emails de confirmação nem palavras-passe)
+    const embutido = /Instagram|FBAN|FBAV|FB_IAB|Line\/|TikTok|musical_ly|Snapchat|Twitter|LinkedInApp|; wv\)/i.test(navigator.userAgent);
+    return {
+      html: hd([["Conta"]], "Entra no jogo", "Faz palpites, ganha pontos e troca-os por prémios") + `<section style="padding-top:36px"><div class="wrap"><div class="conta-grid">
+        <div class="conta-form">${embutido ? `<div class="box aviso"><b>Abre o site no teu navegador para entrares.</b><p>O Google não deixa entrar a partir do navegador do Instagram e de outras apps. Toca em <b>⋯</b> (canto superior direito) e escolhe <b>Abrir no navegador</b>, ou copia o link e cola-o no Safari ou no Chrome.</p><button class="btn o" id="cCopiar">Copiar o link do site</button></div>` : ""}
+          <button class="btn google" id="cGoogle" ${embutido ? "disabled" : ""}><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg> ${LIVE ? "Continuar com Google" : "Entrar (demonstração)"}</button>
+          <p class="note" style="margin:0">Sem palavras-passe: entras com a tua conta Google. Ao continuar, aceitas a <a href="#/privacidade">política de privacidade</a>. No ranking aparece só o teu primeiro nome, que podes mudar depois.</p></div>
+        <div class="box rink-r"><h3 class="x" style="font-size:24px;margin-bottom:10px">Como funciona</h3>${regras()}<p style="margin-top:14px"><a class="btn o" href="#/ranking">Ver o ranking</a></p></div></div></div></section>`,
+      after: () => {
+        if ($("#cCopiar")) $("#cCopiar").onclick = async () => { try { await navigator.clipboard.writeText(location.origin + "/#/conta"); toast("Link copiado ✓ Cola-o no Safari ou no Chrome."); } catch (e) { toast(location.origin); } };
+        $("#cGoogle").onclick = async () => {
+          if (!LIVE) { DM.u = { id: "eu", email: "demo@gmail.com", nome: "João N.", pontos: 30, total: 30, certos: 3, errados: 0 }; await carregarEu(); const v = sessionStorage.hpVoltar; delete sessionStorage.hpVoltar; return go(v || "/conta"); }
+          $("#cGoogle").disabled = true;
+          const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
+          if (error) { toast(/provider is not enabled/i.test(error.message) ? "A entrada com Google ainda não está ligada no Supabase." : erroPT(error.message)); $("#cGoogle").disabled = false; }
+        };
+      }
+    };
+  }
+  if (!EU) return {
+    html: hd([["Conta"]], "Entra no jogo", "Faz palpites, ganha pontos e troca-os por prémios") + `<section style="padding-top:36px"><div class="wrap"><div class="conta-grid">
+      <div><div class="zchips" id="cTabs"><a class="zchip on" data-t="entrar" href="#">Entrar</a><a class="zchip" data-t="criar" href="#">Criar conta</a></div>
+        <form class="conta-form" id="fConta"><label class="so-criar" hidden>Nome que aparece no ranking<input class="input" name="nome" maxlength="30" autocomplete="nickname" placeholder="ex.: Zé do Rinque"></label>
+          <label>Email<input class="input" type="email" name="email" required autocomplete="email"></label>
+          <label>Palavra-passe<input class="input" type="password" name="pass" required minlength="6" autocomplete="current-password"></label>
+          <label class="so-criar chk" hidden><input type="checkbox" name="ok"> Li e aceito a <a href="#/privacidade">política de privacidade</a></label>
+          <button class="btn" id="cBtn">Entrar</button>
+          <button type="button" class="btn o" id="cGoogle">Continuar com Google</button>
+          <a href="#" id="cEsq" class="so-entrar">Esqueci-me da palavra-passe</a>${LIVE ? "" : `<p class="note">Modo demonstração: qualquer email e palavra-passe servem.</p>`}</form></div>
+      <div class="box rink-r"><h3 class="x" style="font-size:24px;margin-bottom:10px">Como funciona</h3>${regras()}<p style="margin-top:14px"><a class="btn o" href="#/ranking">Ver o ranking</a></p></div></div></div></section>`,
+    after: () => {
+      let modo = "entrar"; const f = $("#fConta");
+      $("#cTabs").onclick = e => { const a = e.target.closest("[data-t]"); if (!a) return; e.preventDefault(); modo = a.dataset.t; document.querySelectorAll("#cTabs .zchip").forEach(x => x.classList.toggle("on", x === a)); f.querySelectorAll(".so-criar").forEach(x => x.hidden = modo !== "criar"); f.querySelectorAll(".so-entrar").forEach(x => x.hidden = modo !== "entrar"); $("#cBtn").textContent = modo === "criar" ? "Criar conta" : "Entrar"; f.pass.autocomplete = modo === "criar" ? "new-password" : "current-password"; };
+      const depois = () => { const v = sessionStorage.hpVoltar; delete sessionStorage.hpVoltar; go(v || "/conta"); };
+      f.onsubmit = async e => {
+        e.preventDefault(); const email = f.email.value.trim(), pass = f.pass.value, nome = f.nome.value.trim();
+        if (modo === "criar" && !f.ok.checked) return toast("Tens de aceitar a política de privacidade.");
+        $("#cBtn").disabled = true;
+        try {
+          if (!LIVE) { DM.u = { id: "eu", email, nome: nome || email.split("@")[0], pontos: 30, total: 30, certos: 3, errados: 0 }; await carregarEu(); return depois(); }
+          if (modo === "criar") { const { data, error } = await sb.auth.signUp({ email, password: pass, options: { data: { nome }, emailRedirectTo: location.origin + "/" } }); if (error) throw error; if (!data.session) { f.innerHTML = `<div class="box"><h3 class="x" style="font-size:22px">Confirma o teu email</h3><p style="margin-top:8px">Enviámos uma mensagem para <b>${esc(email)}</b>. Carrega no link que lá está para ativares a conta (vê também no spam).</p></div>`; return; } }
+          else { const { error } = await sb.auth.signInWithPassword({ email, password: pass }); if (error) throw error; }
+          await carregarEu(); depois();
+        } catch (er) { toast(erroPT(er.message)); } finally { if ($("#cBtn")) $("#cBtn").disabled = false; }
+      };
+      $("#cEsq").onclick = async e => { e.preventDefault(); const email = f.email.value.trim(); if (!email) return toast("Escreve primeiro o teu email."); if (LIVE) { const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + "/" }); if (error) return toast(erroPT(error.message)); } toast("Se o email existir, vais receber um link para criares outra palavra-passe."); };
+      if ($("#cGoogle")) $("#cGoogle").onclick = () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + "/" } });
+    }
+  };
+  const [pos, palp, movs, peds] = await Promise.all([R.rpc("minha_posicao").catch(() => null), R.meus("palpites", x => x.order("criado_em", { ascending: false }).limit(30)), R.meus("movimentos", x => x.order("criado_em", { ascending: false }).limit(25)), R.meus("loja_pedidos", x => x.order("criado_em", { ascending: false }).limit(20))]);
+  const jogos = palp.length ? await q("jogos", { in: { id: palp.map(p => p.jogo_id) } }) : [], jm = new Map(jogos.map(j => [j.id, j]));
+  const esc1 = (p, j) => p.escolha === "X" ? "Empate" : tName(p.escolha === "1" ? j.casa_id : j.fora_id);
+  const tot = EU.certos + EU.errados, MOT = { palpite: "Palpite", direto: "Jogo em direto", loja: "Loja", devolucao: "Devolução", ajuste: "Ajuste", boas_vindas: "Boas-vindas" }, EST = { pendente: "A tratar", entregue: "Entregue", cancelado: "Cancelado (pontos devolvidos)" };
+  return {
+    html: hd([["Conta"]], esc(EU.nome), EU.email ? esc(EU.email) : "") + `<section style="padding-top:36px"><div class="wrap">
+      <div class="conta-cards"><div class="ccd dest"><span class="lbl">Pontos para gastar</span><b>${EU.pontos}</b><a href="#/loja">Ir à loja →</a></div><div class="ccd"><span class="lbl">Ranking</span><b>${pos ? pos + ".º" : "—"}</b><a href="#/ranking">${EU.total} pts · ver ranking →</a></div><div class="ccd"><span class="lbl">Palpites certos</span><b>${tot ? Math.round(EU.certos / tot * 100) + "%" : "—"}</b><small>${EU.certos} certos · ${EU.errados} errados</small></div></div>
+      <h3 class="x conta-h">Os meus palpites</h3>${palp.length ? `<div class="conta-lista">${palp.filter(p => jm.has(p.jogo_id)).map(p => { const j = jm.get(p.jogo_id); return `<a href="#/jogo/${j.id}"><span><b>${esc(tName(j.casa_id))} – ${esc(tName(j.fora_id))}</b><small>${esc(fmtD(j.data))} · palpite: ${esc(esc1(p, j))}</small></span>${p.resolvido ? `<i class="${p.pontos > 0 ? "ok" : p.pontos < 0 ? "ko" : ""}">${pts(p.pontos || 0)}</i>` : `<i class="esp">a aguardar</i>`}</a>`; }).join("")}</div>` : empty("Ainda não fizeste palpites. Abre um jogo que ainda não começou e escolhe quem ganha.")}
+      ${peds.length ? `<h3 class="x conta-h">Pedidos da loja</h3><div class="conta-lista">${peds.map(p => `<div><span><b>${esc(p.item_nome)}</b><small>${esc(fmtDN(p.criado_em))} · ${EST[p.estado] || p.estado}${p.nota ? " · " + esc(p.nota) : ""}</small></span><i>−${p.custo}</i></div>`).join("")}</div>` : ""}
+      <h3 class="x conta-h">Movimentos de pontos</h3>${movs.length ? `<div class="conta-lista">${movs.map(m => `<div><span><b>${esc(MOT[m.motivo] || m.motivo)}</b><small>${esc(fmtDN(m.criado_em))}${m.descricao ? " · " + esc(m.descricao) : ""}</small></span><i class="${m.pontos > 0 ? "ok" : "ko"}">${pts(m.pontos)}</i></div>`).join("")}</div>` : empty("Ainda sem movimentos.")}
+      <h3 class="x conta-h">Como se ganham pontos</h3><div class="box">${regras()}</div>
+      <h3 class="x conta-h">A minha conta</h3><form class="conta-form linha" id="fNome"><label>Nome no ranking<input class="input" name="n" maxlength="30" value="${esc(EU.nome)}" required minlength="2"></label><button class="btn o">Guardar nome</button></form>
+      <p class="conta-acoes"><button class="btn" id="cSair">Sair da conta</button><button class="btn o" id="cApagar">Apagar a minha conta</button></p></div></section>`,
+    after: () => {
+      $("#fNome").onsubmit = async e => { e.preventDefault(); try { await R.rpc("definir_nome", { p_nome: e.target.n.value }); toast("Nome guardado ✓"); go("/conta"); } catch (er) { toast(er.message); } };
+      $("#cSair").onclick = async () => { if (LIVE) await sb.auth.signOut(); else DM.u = null; await carregarEu(); go("/"); };
+      $("#cApagar").onclick = async () => { if (!confirm("Apagar a conta? Perdes os pontos, os palpites e os pedidos. Não dá para desfazer.")) return; try { await R.rpc("apagar_conta"); if (LIVE) await sb.auth.signOut(); await carregarEu(); toast("Conta apagada."); go("/"); } catch (er) { toast(er.message); } };
+    }
+  };
+}
+async function pRanking() {
+  if (!recAtivo()) return pConta();
+  await carregarEu(); const l = await R.ranking();
+  return { html: hd([["Ranking"]], "Ranking", "Os melhores palpiteiros do hóquei português") + `<section style="padding-top:36px"><div class="wrap">${l.length ? `<table class="rank"><thead><tr><th>#</th><th>Adepto</th><th class="c">Certos</th><th class="c">Errados</th><th class="c">Pontos</th></tr></thead><tbody>${l.map((p, i) => `<tr class="${EU && p.id === EU.id ? "eu" : ""} ${i < 3 ? "q" : ""}"><td><span class="pos">${i + 1}</span></td><td style="font-weight:600">${avatar(null, p.nome)} ${esc(p.nome)}${EU && p.id === EU.id ? " <small>(tu)</small>" : ""}</td><td class="c">${p.certos}</td><td class="c">${p.errados}</td><td class="c"><b>${p.total}</b></td></tr>`).join("")}</tbody></table>` : empty("Ainda ninguém pontuou. Sê o primeiro!")}
+    <div class="box rink-r" style="margin-top:28px"><h3 class="x" style="font-size:22px;margin-bottom:8px">Como entrar no ranking</h3>${regras()}${EU ? "" : `<p style="margin-top:14px"><a class="btn" href="#/conta">Criar conta</a></p>`}</div></div></section>` };
+}
+async function pLoja() {
+  if (!recAtivo()) return pConta();
+  await carregarEu(); const itens = await R.itens();
+  return {
+    html: hd([["Loja"]], "Loja", EU ? `Tens ${EU.pontos} pontos para gastar` : "Troca os teus pontos por prémios") + `<section style="padding-top:36px"><div class="wrap">${itens.length ? `<div class="loja">${itens.map(i => { const esg = i.stock != null && i.stock <= 0, falta = EU ? i.custo - EU.pontos : 0; return `<div class="item ${esg ? "esg" : ""}"><div class="item-img">${i.imagem_url ? `<img src="${esc(i.imagem_url)}" alt="" loading="lazy">` : `<span>🎁</span>`}${i.stock != null && !esg && i.stock <= 5 ? `<em>Só ${i.stock}</em>` : ""}</div><div class="item-b"><h3>${esc(i.nome)}</h3>${i.descricao ? `<p>${esc(i.descricao)}</p>` : ""}<div class="item-f"><b>${i.custo} <small>pts</small></b>${esg ? `<span class="lbl">Esgotado</span>` : `<button class="btn ${falta > 0 ? "o" : ""}" data-i="${i.id}" ${falta > 0 ? "disabled" : ""}>${!EU ? "Entrar" : falta > 0 ? `Faltam ${falta}` : "Resgatar"}</button>`}</div></div></div>`; }).join("")}</div>` : empty("A loja ainda não tem artigos. Vai juntando pontos!")}
+      <p class="note">Depois de resgatares, entramos em contacto contigo pelo email da conta para combinar a entrega. Os pedidos ficam em <a href="#/conta">A minha conta</a>.</p></div></section>`,
+    after: () => { document.querySelectorAll(".loja [data-i]").forEach(b => b.onclick = () => {
+      if (!EU) { sessionStorage.hpVoltar = "/loja"; return go("/conta"); }
+      const i = itens.find(x => String(x.id) === b.dataset.i);
+      modal("Resgatar " + esc(i.nome), `<p>Vais gastar <b>${i.custo} pontos</b> (ficas com ${EU.pontos - i.custo}).</p><label class="conta-form" style="margin-top:12px">Telemóvel ou outra forma de contacto (opcional)<input class="input" id="rgC" maxlength="80"></label><p style="margin-top:14px"><button class="btn" id="rgOk">Confirmar</button></p>`);
+      $("#modal [data-fechar]").textContent = "Cancelar";
+      $("#rgOk").onclick = async () => { $("#rgOk").disabled = true; try { await R.rpc("resgatar", { p_item: i.id, p_contacto: $("#rgC").value }); $("#modal").classList.remove("open"); await carregarEu(); toast("Pedido feito ✓ Vamos contactar-te por email."); go("/conta"); } catch (er) { toast(er.message); $("#rgOk").disabled = false; } };
+    }); }
+  };
+}
+// chamado pelo router depois de cada página
+function recompensasNaPagina(p) { if (p[0] === "jogo" && p[1]) montarPalpite(p[1]); }
+// arranque: sessão guardada, links de confirmação/recuperação que chegam por email
+async function iniciarContas() {
+  if (!recAtivo()) return;
+  const h = location.hash, veioDoEmail = /^#(access_token|error|error_code)=|[#&]type=(recovery|signup|magiclink)/.test(h);
+  if (LIVE) sb.auth.onAuthStateChange((ev) => { if (ev === "PASSWORD_RECOVERY") { recuperar = true; go("/conta"); } if (ev === "SIGNED_OUT" || ev === "SIGNED_IN" || ev === "USER_UPDATED") setTimeout(carregarEu, 0); });
+  if (/type=recovery/.test(h)) recuperar = true;
+  await carregarEu();
+  if (veioDoEmail) {
+    let destino = "/conta"; try { if (EU && !recuperar && sessionStorage.hpVoltar) { destino = sessionStorage.hpVoltar; delete sessionStorage.hpVoltar; } } catch (e) { }
+    try { history.replaceState(null, "", "#" + destino); } catch (e) { }
+    if (/error_description=([^&]+)/.test(h)) toast(decodeURIComponent(RegExp.$1).replace(/\+/g, " ")); else if (EU && !recuperar) setTimeout(() => toast(`Olá, ${EU.nome}! Já podes fazer palpites.`), 600);
+  }
+}
 
 /* ---------------- visita guiada (1.ª abertura; repete-se em Menu > Como usar) ----------------
    O próprio site navega: abre a competição, um jogo, faz scroll, e destaca cada zona com a explicação. */

@@ -107,7 +107,11 @@ window.HP_DEMO = (function () {
   const equipa_jornada = [{ id: "ej1", competicao_id: 493, jornada: 1, titulo: "Equipa da 1ª Jornada", publicado: true, treinador: "Hugo Azevedo", treinador_clube: 123,
     jogadores: [{ posicao: "Guarda-redes", nome: "Àlvaro Shehda", clube_id: 123, numero: 1 }, { posicao: "Defesa", nome: "Abreu", clube_id: 123, numero: 78 },
       { posicao: "Defesa", nome: "Gonçalo Neto", clube_id: 120 }, { posicao: "Médio", nome: "Rafa Almeida", clube_id: 129, numero: 25 }, { posicao: "Avançado", nome: "Miguel Rocha", clube_id: 951 }] }];
-  const definicoes = [{ chave: "ultima_atualizacao", valor: { quando: new Date().toISOString(), modo: "demo" } },
+  const loja_itens = [{ id: "i1", nome: "Bilhete duplo · jogo do Campeonato Placard", descricao: "Dois bilhetes para um jogo à escolha (sujeito a disponibilidade).", custo: 120, stock: 4, limite_por_pessoa: 1, ativo: true, ordem: 1, imagem_url: null },
+    { id: "i2", nome: "Cachecol Hóquei em Português", descricao: "Edição limitada.", custo: 250, stock: 10, limite_por_pessoa: null, ativo: true, ordem: 2, imagem_url: null },
+    { id: "i3", nome: "Autocolantes", descricao: "Pack de 5 autocolantes.", custo: 25, stock: null, limite_por_pessoa: null, ativo: true, ordem: 3, imagem_url: null },
+    { id: "i4", nome: "Camisola oficial autografada", descricao: "Sorteada entre os clubes parceiros.", custo: 900, stock: 0, limite_por_pessoa: 1, ativo: true, ordem: 4, imagem_url: null }];
+  const definicoes = [{ chave: "recompensas", valor: { ativo: true, acerto: 10, erro: 7, direto: 1, boas_vindas: 0 } }, { chave: "ultima_atualizacao", valor: { quando: new Date().toISOString(), modo: "demo" } },
     { chave: "sobre", valor: { texto: "O Hóquei em Português é a casa de quem vive o hóquei em patins: resultados, histórias e o dia a dia dos clubes, do Placard às divisões regionais." } }];
   const patrocinios = [
     { id: "sp1", nome: "Exemplo", imagem_url: null, link: "#/sobre", texto: "O teu banner aqui · Anuncia no Hóquei em Português", posicao: "inicio", ativo: true, ordem: 1 },
@@ -118,5 +122,5 @@ window.HP_DEMO = (function () {
   [["1ª Parte", "23:24", "golo", "casa", "Miccoli"], ["1ª Parte", "17:48", "golo", "casa", "Joca Guimarães"], ["1ª Parte", "04:10", "golo", "fora", "Marc Grau-Tallada"], ["2ª Parte", "22:50", "golo_penalti", "fora", "Carlo di Benedetto"],
    ["2ª Parte", "16:31", "azul", "fora", "Carlo di Benedetto"], ["2ª Parte", "05:44", "golo", "casa", "Joca Guimarães"], ["2ª Parte", "05:44", "desconto", "fora", null], ["2ª Parte", "00:15", "livre_falhado", "casa", "Miccoli"]]
     .forEach((e, i) => eventos.push({ id: 900 + i, jogo_id: 1600000001, ordem: i, parte: e[0], tempo: e[1], tipo: e[2], lado: e[3], jogador: e[4], jogador_id: null }));
-  return { patrocinios, competicoes, clubes, equipas, classificacao, jogos, eventos, jogadores: J.map(({ _eq, _g, ...p }) => p), plantel, tecnicos, marcadores, noticias, mercado, equipa_jornada, definicoes, newsletter: [], mensagens: [] };
+  return { patrocinios, competicoes, clubes, equipas, classificacao, jogos, eventos, jogadores: J.map(({ _eq, _g, ...p }) => p), plantel, tecnicos, marcadores, noticias, mercado, equipa_jornada, definicoes, newsletter: [], mensagens: [], loja_itens, loja_pedidos: [], perfis: [], movimentos: [] };
 })();

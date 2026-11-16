@@ -16,20 +16,26 @@ delete from tecnicos
 -- Seniores e Sub-23 misturados (ex.: Fânzeres): o hp.fpp.pt usa o mesmo n.º de equipa nas duas provas.
 -- O robô novo passa a guardar a equipa Sub-23 à parte. Aqui limpam-se os plantéis misturados dessas equipas
 -- e marcam-se os jogos delas para serem relidos (o robô volta a preencher tudo, já separado).
-drop table if exists afetadas;
-create temporary table afetadas as
-  select distinct e as id from (
-    select j.casa_id as e from jogos j join competicoes c on c.id = j.competicao_id where c.nome ~* 'sub\s*-?\s*\d+' or c.grupo ~* 'sub\s*-?\s*\d+'
+do $$
+declare
+  afetadas int[];
+begin
+  select coalesce(array_agg(distinct e), '{}') into afetadas from (
+    select j.casa_id as e from jogos j join competicoes c on c.id = j.competicao_id
+     where c.nome ~* 'sub\s*-?\s*\d+' or c.grupo ~* 'sub\s*-?\s*\d+'
     union all
-    select j.fora_id from jogos j join competicoes c on c.id = j.competicao_id where c.nome ~* 'sub\s*-?\s*\d+' or c.grupo ~* 'sub\s*-?\s*\d+'
+    select j.fora_id from jogos j join competicoes c on c.id = j.competicao_id
+     where c.nome ~* 'sub\s*-?\s*\d+' or c.grupo ~* 'sub\s*-?\s*\d+'
     union all
-    select id % 1000000 from equipas where (id between 7000000 and 99999999)
+    select id % 1000000 from equipas where id between 7000000 and 99999999
   ) x where e is not null and e < 1000000;
 
-delete from plantel  where coalesce(manual, false) = false and equipa_id in (select id from afetadas);
-delete from tecnicos where equipa_id in (select id from afetadas);
-update equipas set plantel_em = null where id in (select id from afetadas);
-update jogos set detalhes_em = null
- where golos_casa is not null and id < 1500000000
-   and (casa_id in (select id from afetadas) or fora_id in (select id from afetadas));
-drop table if exists afetadas;
+  delete from plantel  where coalesce(manual, false) = false and equipa_id = any(afetadas);
+  delete from tecnicos where equipa_id = any(afetadas);
+  update equipas set plantel_em = null where id = any(afetadas);
+  update jogos set detalhes_em = null
+   where golos_casa is not null and id < 1500000000
+     and (casa_id = any(afetadas) or fora_id = any(afetadas));
+
+  raise notice 'Equipas limpas: %', coalesce(array_length(afetadas, 1), 0);
+end $$;

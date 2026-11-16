@@ -439,8 +439,62 @@ S.definicoes = async () => {
     after: () => { wireForm($("#frm")); $("#frm").onsubmit = async e => { e.preventDefault(); await save("definicoes", [{ chave: "sobre", valor: { texto: $("#f_sobre").value } }, { chave: "selecoes", valor: { texto: $("#f_selecoes").value } }, { chave: "privacidade", valor: $("#f_privacidade").value.trim() ? { texto: $("#f_privacidade").value, atualizado: new Date().toLocaleDateString("pt-PT", { month: "long", year: "numeric" }) } : null }], "chave"); }; } };
 };
 
+/* --- Recompensas: regras dos pontos, ranking e ajustes --- */
+S.recompensas = async () => {
+  const cfg = { ativo: true, acerto: 10, erro: 7, direto: 1, boas_vindas: 0, ...((await all("definicoes", x => x.eq("chave", "recompensas")))[0]?.valor || {}) };
+  const perfis = await all("perfis", x => x.order("total", { ascending: false }).limit(100));
+  const pend = (await all("palpites", x => x.eq("resolvido", false))).length;
+  const F = [{ k: "ativo", l: "Contas, palpites e loja ligados no site", t: "check" }, { k: "acerto", l: "Pontos por palpite certo", t: "number" }, { k: "erro", l: "Pontos que se perdem por palpite errado", t: "number", help: "escreve o número sem o sinal; 0 = não tira pontos" },
+    { k: "direto", l: "Pontos por abrir um jogo em direto", t: "number", help: "uma vez por jogo; 0 = desligado" }, { k: "boas_vindas", l: "Pontos de boas-vindas ao criar conta", t: "number" }];
+  return {
+    html: `<h1>Recompensas</h1><p class="hint">Regras dos pontos. Os pontos são dados automaticamente quando o robô marca um jogo como terminado. Mudar os valores só afeta os jogos que terminarem a partir de agora. O saldo (para gastar na loja) nunca fica abaixo de zero; a pontuação do ranking pode ficar negativa.</p>
+    <div class="cards" style="grid-template-columns:repeat(3,1fr)"><div class="card"><span>Contas</span><b>${perfis.length}${perfis.length === 100 ? "+" : ""}</b></div><div class="card"><span>Palpites à espera de resultado</span><b>${pend}</b></div><div class="card"><span>Pontos em circulação</span><b>${perfis.reduce((s, p) => s + (p.pontos || 0), 0)}</b></div></div>
+    <form class="form" id="frm">${F.map(f => field(f, cfg[f.k])).join("")}<div class="bar"><button class="btn">Guardar regras</button></div></form>
+    <h2 style="margin-top:34px">Ranking</h2><p class="hint">“Ajustar” dá ou tira pontos à mão (ex.: prémio de um passatempo, ou corrigir um erro). Fica registado nos movimentos do utilizador.</p>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Nome</th><th>Ranking</th><th>Saldo</th><th>Certos</th><th>Errados</th><th></th></tr></thead><tbody>${perfis.map((p, i) => `<tr data-u="${esc(p.id)}"><td>${i + 1}</td><td><b>${esc(p.nome)}</b></td><td>${p.total}</td><td>${p.pontos}</td><td>${p.certos}</td><td>${p.errados}</td><td><button class="btn sm o">Ajustar</button></td></tr>`).join("") || `<tr><td colspan="7">Ainda não há contas.</td></tr>`}</tbody></table></div>`,
+    after: () => {
+      wireForm($("#frm"));
+      $("#frm").onsubmit = async e => { e.preventDefault(); const r = readForm(F); for (const k of ["acerto", "erro", "direto", "boas_vindas"]) r[k] = Math.max(0, Math.round(Math.abs(r[k] ?? 0))); await save("definicoes", [{ chave: "recompensas", valor: r }], "chave"); };
+      document.querySelectorAll("tr[data-u] button").forEach(b => b.onclick = async () => {
+        const tr = b.closest("tr"), n = parseInt(prompt("Quantos pontos? (negativo para tirar)", "10"), 10); if (!n) return;
+        const m = prompt("Motivo (o utilizador vê isto nos movimentos):", "Passatempo") || "Ajuste";
+        const { error } = await sb.rpc("ajustar_pontos", { p_user: tr.dataset.u, p_pontos: n, p_motivo: m }); if (error) return toast("Erro: " + error.message, 1); toast("Pontos ajustados ✓"); route();
+      });
+    }
+  };
+};
+
+/* --- Loja: artigos e pedidos --- */
+const F_LOJA = [{ k: "nome", l: "Artigo", wide: 1 }, { k: "descricao", l: "Descrição", t: "textarea", rows: 3 }, { k: "imagem_url", l: "Imagem", t: "image", help: "formato 4:3, ex.: 800×600 px" },
+  { k: "custo", l: "Custo em pontos", t: "number" }, { k: "stock", l: "Quantidade disponível", t: "number", help: "vazio = sem limite" }, { k: "limite_por_pessoa", l: "Máximo por pessoa", t: "number", help: "vazio = sem limite" },
+  { k: "ordem", l: "Ordem", t: "number", help: "menor aparece primeiro" }, { k: "ativo", l: "Visível na loja", t: "check" }];
+S.loja = async (id) => {
+  if (id) {
+    const s = id === "new" ? { id: "new", ativo: true, ordem: 100, custo: 100 } : (await all("loja_itens", x => x.eq("id", id)))[0];
+    if (!s) return "<h1>Não encontrado</h1>";
+    return { html: `<a class="back" href="#loja">← Loja</a><h1>${id === "new" ? "Novo artigo" : esc(s.nome)}</h1><form class="form" id="frm">${F_LOJA.map(f => field(f, s[f.k])).join("")}<div class="bar"><button class="btn">Guardar</button>${id !== "new" ? `<button type="button" class="btn danger" id="del">Apagar</button>` : ""}</div></form>`,
+      after: () => { wireForm($("#frm")); $("#frm").onsubmit = async e => { e.preventDefault(); const r = readForm(F_LOJA); if (!r.nome) return toast("Falta o nome", 1); if (r.custo == null || r.custo < 0) return toast("Indica o custo em pontos", 1); r.ordem = r.ordem ?? 100; r.id = s.id; if (await save("loja_itens", r)) location.hash = "loja"; };
+        if ($("#del")) $("#del").onclick = async () => { if (confirm("Apagar este artigo? Os pedidos já feitos ficam guardados.") && await del("loja_itens", "id", s.id)) location.hash = "loja"; }; } };
+  }
+  const l = await all("loja_itens", x => x.order("ordem").order("custo"));
+  const peds = await all("loja_pedidos", x => x.order("criado_em", { ascending: false }).limit(200));
+  const EST = { pendente: "Por tratar", entregue: "Entregue", cancelado: "Cancelado" };
+  return {
+    html: `<div class="head"><h1>Loja</h1><a class="btn" href="#loja/new">+ Novo artigo</a></div><p class="hint">Os artigos que os utilizadores podem trocar por pontos: bilhetes, merchandising, descontos… Quando alguém resgata, os pontos saem logo do saldo e o pedido aparece em baixo com o email da pessoa, para combinares a entrega.</p>
+    <table class="tbl"><thead><tr><th>Artigo</th><th>Custo</th><th>Stock</th><th>Resgatados</th><th>Visível</th></tr></thead><tbody>${l.map(i => `<tr><td><a href="#loja/${i.id}"><b>${esc(i.nome)}</b></a></td><td>${i.custo} pts</td><td>${i.stock ?? "sem limite"}</td><td>${peds.filter(p => p.item_id === i.id && p.estado !== "cancelado").length}</td><td>${i.ativo ? "Sim" : "Não"}</td></tr>`).join("") || `<tr><td colspan="5">Ainda não há artigos. Carrega em “+ Novo artigo”.</td></tr>`}</tbody></table>
+    <h2 style="margin-top:34px">Pedidos ${peds.filter(p => p.estado === "pendente").length ? `<small>(${peds.filter(p => p.estado === "pendente").length} por tratar)</small>` : ""}</h2>
+    <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Data</th><th>Artigo</th><th>Email</th><th>Contacto</th><th>Pontos</th><th>Estado</th><th></th></tr></thead><tbody>${peds.map(p => `<tr data-p="${esc(p.id)}"><td>${new Date(p.criado_em).toLocaleDateString("pt-PT")}</td><td><b>${esc(p.item_nome)}</b></td><td>${p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : "—"}</td><td>${esc(p.contacto || "—")}</td><td>${p.custo}</td><td>${EST[p.estado] || p.estado}${p.nota ? `<br><small>${esc(p.nota)}</small>` : ""}</td><td style="white-space:nowrap">${p.estado === "pendente" ? `<button class="btn sm" data-a="ok">Entregue</button> <button class="btn sm o" data-a="x">Cancelar e devolver</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="7">Ainda não há pedidos.</td></tr>`}</tbody></table></div>`,
+    after: () => document.querySelectorAll("tr[data-p] button").forEach(b => b.onclick = async () => {
+      const id = b.closest("tr").dataset.p;
+      if (b.dataset.a === "ok") { const { error } = await sb.from("loja_pedidos").update({ estado: "entregue" }).eq("id", id); if (error) return toast("Erro: " + error.message, 1); toast("Marcado como entregue ✓"); }
+      else { const nota = prompt("Motivo do cancelamento (o utilizador vê isto). Os pontos são devolvidos.", ""); if (nota === null) return; const { error } = await sb.rpc("cancelar_pedido", { p_pedido: id, p_nota: nota || null }); if (error) return toast("Erro: " + error.message, 1); toast("Cancelado e pontos devolvidos ✓"); }
+      route();
+    })
+  };
+};
+
 /* ---------- navegação ---------- */
-const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["notificacoes", "Notificações"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["zonas", "Zonas das tabelas"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
+const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["notificacoes", "Notificações"], ["recompensas", "Recompensas"], ["loja", "Loja"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["zonas", "Zonas das tabelas"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
 async function route() {
   const h = location.hash.slice(1) || "painel";
   const [path, qs] = h.split("?"); const [sec, id] = path.split("/");
