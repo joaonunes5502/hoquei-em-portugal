@@ -692,37 +692,99 @@ function setTheme(t) { document.documentElement.dataset.theme = t; if (temaAtual
   go(location.hash.slice(1) || "/");
   setTimeout(() => { if (!document.getElementById("intro")) tutorial(); else setTimeout(tutorial, 2800); }, 900); // só na 1.ª visita
   // atualiza o placar e a página do jogo de 2 em 2 minutos (o robô corre de 10 em 10)
-  setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "")) go(cur); }, 120000);
+  setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "") && !visitaAtiva) go(cur); }, 120000);
 })();
 
-/* ---------------- tutorial (1.ª abertura; repete-se em Menu > Como usar) ---------------- */
-const TUTORIAL = [
-  ["🏒", "Bem-vindo ao Hóquei em Português", "Resultados, classificações, plantéis e notícias do hóquei em patins português, sempre atualizados. Em 30 segundos mostramos-te o essencial."],
-  ["📊", "Todas as competições", "Em <b>Jogos</b> escolhes a prova (Campeonato Placard, 2ª Divisão, Taça de Portugal…). Dentro de cada uma há separadores: <b>Norte / Sul</b>, classificação, jornadas, calendário e marcadores. Nas taças vês o <b>quadro</b> das eliminatórias."],
-  ["⚫️", "O jogo ao pormenor", "Toca em qualquer jogo para veres a <b>linha de jogo</b>: golos, cartões, time-outs e faltas, minuto a minuto, mais as estatísticas e os plantéis."],
-  ["🔔", "Segue as tuas equipas", "Na página de uma equipa (ou de um jogo) toca em <b>Seguir</b>. Recebes uma notificação quando o jogo começa e outra com o resultado final. Sem conta, sem login."],
-  ["📲", "Põe a app no ecrã", "Em <b>Mais → Instalar a app</b> ficas com o Hóquei em Português no ecrã do telemóvel, como uma app normal. No iPhone é preciso instalar para receber notificações."],
-  ["☾", "Últimos truques", "O botão <b>☾</b> no topo muda para o modo noite. Em <b>Mais</b> tens a pesquisa, o mercado, onde ver os jogos na TV e, sempre que precisares, este guia em <b>Como usar</b>."]
-];
-function tutorial(forcar) {
+/* ---------------- visita guiada (1.ª abertura; repete-se em Menu > Como usar) ----------------
+   O próprio site navega: abre a competição, um jogo, faz scroll, e destaca cada zona com a explicação. */
+async function passosDaVisita() {
+  const c = principal();
+  let jogo = null;
+  if (c) {
+    const js = await q("jogos", { eq: { competicao_id: c.id }, notnull: ["golos_casa"], order: [["data", false], ["hora", false]], limit: 30 });
+    jogo = js.find(x => x.detalhes_em) || js[0] || null;
+  }
+  const eq = jogo ? teamKey(jogo.casa_id) : "";
+  const movel = matchMedia("(max-width:720px)").matches;
+  const P = [];
+  P.push({ ir: "/", titulo: "Bem-vindo ao Hóquei em Português", texto: "Vamos dar uma volta rápida pelo site. É ele que navega: tu só carregas em <b>Seguinte</b>. Podes saltar a qualquer momento." });
+  P.push({ ir: "/", sel: "#board", titulo: "Os jogos do momento", texto: "No topo estão sempre os próximos jogos e os últimos resultados. Toca num deles para abrir o jogo." });
+  P.push({ ir: "/", sel: ".hero", titulo: "As notícias em destaque", texto: "As notícias mais importantes passam aqui. Mais abaixo tens as últimas, a classificação, os marcadores e o mercado." });
+  if (c) {
+    P.push({ ir: "/competicao/" + c.id, sel: ".cpick", titulo: "Escolhe a competição", texto: "Aqui mudas de prova: Campeonato Placard, 2ª Divisão, Taça de Portugal… As provas com zonas (Norte, Sul) têm esses separadores logo por baixo." });
+    P.push({ ir: "/competicao/" + c.id, sel: ".phd .tabs", titulo: "Tudo sobre a prova", texto: "Em cada competição tens a <b>classificação</b>, as <b>jornadas</b>, o <b>calendário</b> completo e os <b>marcadores</b>. Nas taças aparece o <b>quadro</b> das eliminatórias." });
+    P.push({ ir: "/competicao/" + c.id, sel: ".ctab", titulo: "A classificação", texto: "Atualiza sozinha durante os jogos. As cores à esquerda mostram quem vai a play-off, quem sobe e quem desce. Toca numa equipa para abrir a página dela." });
+  }
+  if (jogo) {
+    P.push({ ir: "/jogo/" + jogo.id, sel: ".score-hero", titulo: "A página do jogo", texto: "Abrimos um jogo. Em cima está o resultado e, por baixo, quem marcou os golos." });
+    P.push({ ir: "/jogo/" + jogo.id, sel: ".ldj-wrap", titulo: "A linha de jogo", texto: "Golos, penáltis, cartões, time-outs e faltas, minuto a minuto. Os botões filtram só os golos ou só os cartões." });
+    P.push({ ir: "/jogo/" + jogo.id, sel: ".stats", titulo: "Estatísticas e plantéis", texto: "Mais abaixo ficam as estatísticas do jogo, a arbitragem e os plantéis das duas equipas." });
+    if (notifAtivas()) P.push({ ir: "/jogo/" + jogo.id, sel: ".seguir-jogo", titulo: "Segue as tuas equipas", texto: "Toca em <b>Seguir</b> e recebes uma notificação quando o jogo começa e outra com o resultado final. Sem conta, sem login." });
+  }
+  if (eq) P.push({ ir: "/clube/" + eq, sel: ".clubhero", titulo: "A página da equipa", texto: "Cada equipa tem o seu resumo, o <b>plantel</b>, todos os <b>jogos</b> e as mexidas do <b>mercado</b>." + (notifAtivas() ? " O botão Seguir também está aqui." : "") });
+  P.push({ ir: "/", sel: "#themeBtn", titulo: "Modo noite", texto: "Este botão troca entre o modo dia e o modo noite." });
+  P.push({ ir: "/", sel: movel ? "#tabMenu" : "#menuBtn", titulo: "O resto está aqui", texto: `Em <b>${movel ? "Mais" : "Menu"}</b> tens a pesquisa, todas as competições, onde ver os jogos na TV, <b>instalar a app</b> no telemóvel e este guia outra vez, em <b>Como usar</b>.` });
+  return P;
+}
+let visitaAtiva = false;
+async function tutorial(forcar) {
   if (!forcar) { try { if (localStorage.getItem("hp-tutorial")) return; } catch (e) { return; } }
-  if (document.getElementById("tut")) return;
+  if (visitaAtiva) return;
+  visitaAtiva = true;
   closeMenu();
-  let i = 0;
+  const origem = cur || "/";
+  const passos = await passosDaVisita();
+  let i = 0, alvo = null, token = 0;
+  const calmo = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const el = document.createElement("div");
-  el.id = "tut"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "Como usar o Hóquei em Português");
-  const fechar = () => { try { localStorage.setItem("hp-tutorial", "1"); } catch (e) { } el.classList.add("sai"); setTimeout(() => el.remove(), 250); document.removeEventListener("keydown", tecla); };
-  const pintar = () => {
-    const [ic, t, x] = TUTORIAL[i], ult = i === TUTORIAL.length - 1;
-    el.innerHTML = `<div class="tut-card rink"><button class="tut-skip" data-a="x">${ult ? "Fechar" : "Saltar"}</button><div class="tut-ic" aria-hidden="true">${ic}</div><span class="lbl">${i + 1} de ${TUTORIAL.length}</span><h2 class="x">${esc(t)}</h2><p>${x}</p>
-      <div class="tut-dots">${TUTORIAL.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
-      <div class="tut-btns">${i ? `<button class="btn o" data-a="p">← Anterior</button>` : "<span></span>"}<button class="btn" data-a="${ult ? "x" : "n"}">${ult ? "Começar" : "Seguinte →"}</button></div></div>`;
-    el.querySelector(".tut-btns .btn:last-child").focus();
-  };
-  const tecla = e => { if (e.key === "Escape") fechar(); else if (e.key === "ArrowRight" && i < TUTORIAL.length - 1) { i++; pintar(); } else if (e.key === "ArrowLeft" && i) { i--; pintar(); } };
-  el.onclick = e => { const a = e.target.closest("[data-a]")?.dataset.a; if (a === "x") fechar(); else if (a === "n") { i++; pintar(); } else if (a === "p") { i--; pintar(); } };
-  document.addEventListener("keydown", tecla);
-  document.body.appendChild(el); pintar();
+  el.id = "tut"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Visita guiada ao Hóquei em Português");
+  el.innerHTML = `<div class="tut-foco"></div><div class="tut-card rink-r" aria-live="polite"></div>`;
+  document.body.appendChild(el);
+  const foco = el.querySelector(".tut-foco"), card = el.querySelector(".tut-card");
+  const espera = ms => new Promise(r => setTimeout(r, ms));
+  const procurar = async sel => { for (let k = 0; k < 30; k++) { const x = sel && document.querySelector(sel); if (x && x.getBoundingClientRect().height > 0) return x; await espera(100); } return null; };
+  function colocar() {
+    const vw = innerWidth, vh = innerHeight, r = alvo && alvo.isConnected ? alvo.getBoundingClientRect() : null;
+    if (!r) { foco.style.cssText = `left:${vw / 2}px;top:${vh / 2}px;width:0;height:0;border-radius:50%`; card.className = "tut-card rink-r centro"; card.style.cssText = ""; return; }
+    const m = 8, top = Math.max(6, r.top - m), bot = Math.min(vh - 6, r.bottom + m), left = Math.max(6, r.left - m), right = Math.min(vw - 6, r.right + m);
+    foco.style.cssText = `left:${left}px;top:${top}px;width:${right - left}px;height:${bot - top}px;border-radius:${Math.min(22, (bot - top) / 2)}px`;
+    card.className = "tut-card rink-r";
+    const ch = card.offsetHeight, cw = card.offsetWidth, esp = 14;
+    const cabeAbaixo = vh - bot >= ch + esp + 8, cabeAcima = top >= ch + esp + 8;
+    const y = cabeAbaixo ? bot + esp : cabeAcima ? top - ch - esp : Math.max(8, vh - ch - 12);
+    const x = Math.min(Math.max(12, (left + right) / 2 - cw / 2), vw - cw - 12);
+    card.style.cssText = `left:${x}px;top:${y}px`;
+  }
+  async function mostrar() {
+    const meu = ++token, p = passos[i], ult = i === passos.length - 1;
+    card.classList.add("troca");
+    if (p.ir && cur !== p.ir) { await go(p.ir); if (meu !== token) return; }
+    alvo = p.sel ? await procurar(p.sel) : null;
+    if (meu !== token) return;
+    if (p.sel && !alvo) { if (i < passos.length - 1) { i++; return mostrar(); } }
+    if (alvo) { alvo.scrollIntoView({ block: alvo.getBoundingClientRect().height > innerHeight * .6 ? "start" : "center", behavior: calmo ? "auto" : "smooth" }); if (alvo.getBoundingClientRect().height > innerHeight * .6) scrollBy({ top: -90, behavior: calmo ? "auto" : "smooth" }); await espera(calmo ? 60 : 520); }
+    else scrollTo({ top: 0, behavior: calmo ? "auto" : "smooth" });
+    if (meu !== token) return;
+    card.innerHTML = `<button class="tut-skip" data-a="x">${ult ? "Fechar" : "Saltar"}</button><span class="lbl">${i + 1} de ${passos.length}</span><h2 class="x">${esc(p.titulo)}</h2><p>${p.texto}</p>
+      <div class="tut-barra"><i style="width:${(i + 1) / passos.length * 100}%"></i></div>
+      <div class="tut-btns">${i ? `<button class="btn o" data-a="p">←</button>` : "<span></span>"}<button class="btn" data-a="${ult ? "x" : "n"}">${ult ? "Começar a usar" : "Seguinte →"}</button></div>`;
+    colocar(); card.classList.remove("troca");
+    card.querySelector(".tut-btns .btn:last-child").focus({ preventScroll: true });
+  }
+  const repor = () => { if (visitaAtiva) colocar(); };
+  const travar = e => { if (!e.target.closest || !e.target.closest(".tut-card")) e.preventDefault(); };
+  const tecla = e => { if (e.key === "Escape") fechar(); else if (e.key === "ArrowRight" && i < passos.length - 1) { i++; mostrar(); } else if (e.key === "ArrowLeft" && i) { i--; mostrar(); } };
+  function fechar() {
+    token++; visitaAtiva = false;
+    try { localStorage.setItem("hp-tutorial", "1"); } catch (e) { }
+    removeEventListener("scroll", repor, true); removeEventListener("resize", repor); document.removeEventListener("keydown", tecla);
+    el.classList.add("sai"); setTimeout(() => el.remove(), 250);
+    if (cur !== "/") go(forcar ? origem : "/");
+  }
+  el.addEventListener("click", e => { const a = e.target.closest("[data-a]")?.dataset.a; if (a === "x") fechar(); else if (a === "n") { i++; mostrar(); } else if (a === "p") { i--; mostrar(); } });
+  el.addEventListener("wheel", travar, { passive: false }); el.addEventListener("touchmove", travar, { passive: false });
+  addEventListener("scroll", repor, true); addEventListener("resize", repor); document.addEventListener("keydown", tecla);
+  mostrar();
 }
 
 /* ---------------- app instalável e notificações ---------------- */

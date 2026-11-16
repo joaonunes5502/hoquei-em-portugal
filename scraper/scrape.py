@@ -90,6 +90,20 @@ def escalao(comp):
     return "S" + m.group(1) if m else ""
 
 
+def id_equipa(eid, comp):
+    """O hp.fpp.pt usa o MESMO n.º de equipa para os seniores e para os Sub-23 do clube (ex.: Fânzeres na 3ª Divisão
+    e no Nacional Sub-23). Para não se misturarem, nas provas Sub-N a equipa fica com outro id: N milhões + n.º."""
+    x = escalao(comp)
+    if eid is None or not x.startswith("S") or eid >= 1_000_000:
+        return eid
+    return int(x[1:]) * 1_000_000 + eid
+
+
+def id_fpp(eid):
+    """O n.º da equipa no hp.fpp.pt (desfaz o id_equipa)."""
+    return eid % 1_000_000 if 1_000_000 <= eid < 100_000_000 and not 5_000_000 <= eid < 7_000_000 else eid
+
+
 def chave_nome(n):
     """Nome para comparar equipas entre páginas: sem patrocinador, acentos, espaços ou pontuação."""
     return re.sub(r"[^a-z0-9]", "", _norm(limpar_nome(n)))
@@ -493,8 +507,18 @@ class Robo:
         self.marcadores(cid)
         return jogos
 
+    def comp(self, cid):
+        """nome/grupo da competição (para saber o escalão), lidos 1x por execução."""
+        if getattr(self, "_comps", None) is None or cid not in self._comps:
+            self._comps = {c["id"]: c for c in self.db.select("competicoes", "select=id,nome,grupo")}
+        return self._comps.get(cid) or {}
+
     def calendario(self, cid):
         jogos, equipas = parse_calendar(self.get(f"/Competicao/{cid}"), cid)
+        comp = self.comp(cid)
+        equipas = {id_equipa(k, comp): v for k, v in equipas.items()}
+        for j in jogos:
+            j["casa_id"], j["fora_id"] = id_equipa(j["casa_id"], comp), id_equipa(j["fora_id"], comp)
         self.db.upsert("equipas", [{"id": k, "competicao_id": cid, "nome": v} for k, v in equipas.items()], "id")
         if any(j["casa_id"] is None or j["fora_id"] is None for j in jogos):
             self.equipas_pelo_nome(cid, jogos)
@@ -574,6 +598,8 @@ class Robo:
 
     def classificacao(self, cid):
         cls = parse_classificacao(self.get(f"/Classificacao/{cid}"))
+        for r in cls:
+            r["equipa_id"] = id_equipa(r["equipa_id"], self.comp(cid))
         self.db.upsert("clubes", [{"id": r["clube_id"], "nome": base_clube(r["nome"]), "logo_url": r["logo_url"]} for r in cls if r["clube_id"]], "id")
         self.db.upsert("equipas", [{"id": r["equipa_id"], "competicao_id": cid, "nome": r["nome"], "clube_id": r["clube_id"]} for r in cls], "id")
         if cls:
@@ -601,6 +627,7 @@ class Robo:
 
         ids = []
         for eid, clube_id, logo, nome in info["logos"]:
+            eid = id_equipa(eid, self.comp(j["competicao_id"])) if j.get("competicao_id") else eid
             if clube_id:
                 self.db.upsert("clubes", [{"id": clube_id, "nome": base_clube(nome), "logo_url": logo}], "id")
                 self.db.upsert("equipas", [{"id": eid, "nome": nome, "clube_id": clube_id}], "id")
@@ -638,7 +665,7 @@ class Robo:
 
     # ---------- plantel completo ----------
     def equipa(self, cid, eid):
-        e = parse_equipa(self.get(f"/Equipa/{cid}/{eid}"))
+        e = parse_equipa(self.get(f"/Equipa/{cid}/{id_fpp(eid)}"))
         if e["clube_id"]:
             self.db.upsert("clubes", [{"id": e["clube_id"], "nome": base_clube(e["nome"]) or str(e["clube_id"]), "logo_url": e["logo_url"]}], "id")
         self.db.upsert("equipas", [{"id": eid, "competicao_id": cid, "nome": e["nome"] or str(eid), "clube_id": e["clube_id"],
@@ -678,7 +705,7 @@ class Robo:
         """Detalhes: jogos dos últimos 3 dias (resultados podem ser corrigidos) + os que ainda não têm detalhes."""
         desde = (self.hoje - timedelta(days=3)).isoformat()
         recentes = [j for j in todos if j["id"] > 0 and j["data"] and desde <= j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
-        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&id=gt.0&id=lt.1500000000&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
+        sem = self.db.select("jogos", f"select=id,competicao_id,casa_id,fora_id&id=gt.0&id=lt.1500000000&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
         ids = {j["id"] for j in recentes}
         fila = recentes + [x for x in sem if x["id"] not in ids]
         print(f"Detalhes de {len(fila)} jogos")

@@ -607,19 +607,22 @@ html{transition:none}
 .doc.mkd{grid-template-columns:44px 38px 1fr auto;gap:14px}
 @media(max-width:720px){.doc.mkd{grid-template-columns:30px 38px 1fr auto}.mkt .av{width:32px;height:32px}.mkj{gap:9px}}
 
-/* tutorial */
-#tut{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;padding:20px;background:rgba(18,18,18,.62);backdrop-filter:blur(5px);animation:tut-in .25s ease-out}
+/* visita guiada */
+#tut{position:fixed;inset:0;z-index:9000;animation:tut-in .3s ease-out}
 #tut.sai{opacity:0;transition:opacity .25s}
-.tut-card{position:relative;width:min(460px,100%);background:var(--paper);color:var(--ink);padding:34px 30px 26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.35)}
-.tut-skip{position:absolute;top:16px;right:20px;font-size:13px;font-weight:700;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding:6px}
-.tut-ic{width:84px;height:84px;margin:6px auto 18px;display:grid;place-items:center;font-size:40px;background:var(--red);color:#fff;border-radius:0 28px 0 28px}
-.tut-card h2{font-size:clamp(24px,5.5vw,32px);margin:8px 0 12px}
-.tut-card p{color:var(--ink-2);font-size:16px;line-height:1.5;min-height:6em}
+.tut-foco{position:fixed;pointer-events:none;box-shadow:0 0 0 9999px rgba(12,12,12,.68),0 0 0 3px var(--red),0 0 26px 6px rgba(255,255,255,.18);transition:left .45s cubic-bezier(.3,.7,.2,1),top .45s cubic-bezier(.3,.7,.2,1),width .45s cubic-bezier(.3,.7,.2,1),height .45s cubic-bezier(.3,.7,.2,1),border-radius .45s}
+.tut-card{position:fixed;width:min(380px,calc(100vw - 24px));background:var(--paper);color:var(--ink);padding:22px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.45);border:1.5px solid var(--ink);transition:left .4s cubic-bezier(.3,.7,.2,1),top .4s cubic-bezier(.3,.7,.2,1),opacity .2s}
+.tut-card.troca{opacity:.0}
+.tut-card.centro{left:50%!important;top:50%!important;transform:translate(-50%,-50%);width:min(440px,calc(100vw - 32px));padding:34px 28px 24px;text-align:center}
+.tut-skip{position:absolute;top:12px;right:16px;font-size:13px;font-weight:700;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding:6px}
+.tut-card h2{font-size:22px;margin:6px 0 8px;padding-right:54px}
+.tut-card.centro h2{font-size:clamp(24px,5.5vw,32px);padding:0;margin:10px 0 12px}
+.tut-card p{color:var(--ink-2);font-size:15px;line-height:1.5}
 .tut-card p b{color:var(--ink)}
-.tut-dots{display:flex;gap:6px;justify-content:center;margin:18px 0 20px}
-.tut-dots i{width:22px;height:5px;border-radius:3px;background:var(--line)}
-.tut-dots i.on{background:var(--red)}
-.tut-btns{display:flex;justify-content:space-between;gap:12px}
-.tut-btns .btn.o{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+.tut-barra{height:4px;border-radius:2px;background:var(--line);margin:16px 0 14px;overflow:hidden}
+.tut-barra i{display:block;height:100%;background:var(--red);transition:width .4s}
+.tut-btns{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.tut-btns .btn{height:44px}
+.tut-btns .btn.o{background:transparent;color:var(--ink);border:1.5px solid var(--line);padding:0 16px}
 @keyframes tut-in{from{opacity:0}to{opacity:1}}
-@media(prefers-reduced-motion:reduce){#tut{animation:none}}
+@media(prefers-reduced-motion:reduce){#tut{animation:none}.tut-foco,.tut-card{transition:none}}
