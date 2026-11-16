@@ -339,6 +339,55 @@ S.competicoes = async () => ({
   })
 });
 
+/* --- Zonas das tabelas (play-offs, subidas e descidas) --- */
+const ZONAS = { campeao: ["Play-off de apuramento de campeão", "#C9A227"], playoff: ["Play-off", "#2F6FB5"], subida: ["Sobe de divisão", "#1E8E5A"], playoff_subida: ["Play-off de subida", "#62B88E"], playoff_descida: ["Play-off de descida", "#E08A2E"], descida: ["Desce de divisão", "#C0392B"] };
+S.zonas = async () => {
+  const c = +(sessionStorage.zc || D.comps.find(x => x.principal)?.id || D.comps[0]?.id);
+  const comp = D.comps.find(x => x.id === c);
+  const cls = c ? await all("classificacao", x => x.eq("competicao_id", c).order("pos")) : [];
+  const eqs = D.equipas.filter(e => e.competicao_id === c);
+  const lugares = cls.length ? cls.map(r => ({ pos: r.pos, nome: teamName(r.equipa_id) })) : eqs.map((e, i) => ({ pos: i + 1, nome: "—" }));
+  const n = lugares.length;
+  let zs = (Array.isArray(comp?.zonas) ? comp.zonas : []).map(z => ({ ...z }));
+  const linha = (z, i) => `<div class="zrow" data-i="${i}"><select class="in" data-k="tipo">${Object.entries(ZONAS).map(([k, v]) => `<option value="${k}" ${z.tipo === k ? "selected" : ""}>${v[0]}</option>`).join("")}</select>
+    <span>do</span><input class="in" type="number" min="1" data-k="de" value="${esc(z.de ?? "")}" placeholder="1"><span>ao</span><input class="in" type="number" min="1" data-k="ate" value="${esc(z.ate ?? "")}" placeholder="${n || 4}"><span>lugar</span>
+    <input class="in" data-k="nome" value="${esc(z.nome || "")}" placeholder="Nome (opcional)"><button class="btn sm o" data-x title="Tirar">✕</button></div>`;
+  return {
+    html: `<h1>Zonas das tabelas</h1><p class="hint">Escolhe a competição e diz que lugares vão a play-off, sobem ou descem. No site, esses lugares ficam com a cor da zona e aparece uma legenda por baixo da tabela. O “Nome” é opcional: serve para escreveres, por exemplo, “Final Four” ou “Liguilha”. Os atalhos ao lado preenchem as zonas mais comuns; podes acertar os números depois.</p>
+    <div class="filters"><select id="zc">${optComps(c, false)}</select>${n ? `<span class="hint" style="margin:0">${n} equipas na tabela</span>` : ""}</div>
+    <div class="zgrid"><div><div id="zlist"></div>
+      <div class="zbtns"><button class="btn sm o" id="zadd">+ Adicionar zona</button><button class="btn sm o" data-q="campeao">Play-off de campeão</button><button class="btn sm o" data-q="playoff">Play-off</button><button class="btn sm o" data-q="subida">Sobe</button><button class="btn sm o" data-q="playoff_subida">Play-off de subida</button><button class="btn sm o" data-q="playoff_descida">Play-off de descida</button><button class="btn sm o" data-q="descida">Desce</button></div>
+      <p><button class="btn" id="zsave">Guardar zonas</button></p></div>
+      <div><span class="hint">Pré-visualização</span><table class="tbl zprev"><tbody id="zprev"></tbody></table></div></div>`,
+    after: () => {
+      $("#zc").onchange = e => { sessionStorage.zc = e.target.value; route(); };
+      const ler = () => { zs = [...document.querySelectorAll(".zrow")].map(r => { const z = {}; r.querySelectorAll("[data-k]").forEach(i => z[i.dataset.k] = i.type === "number" ? (i.value === "" ? null : +i.value) : i.value.trim()); if (!z.nome) delete z.nome; return z; }); };
+      const prev = () => {
+        const zona = p => zs.find(z => z.de && z.ate && p >= z.de && p <= z.ate);
+        $("#zprev").innerHTML = (n ? lugares : Array.from({ length: 12 }, (_, i) => ({ pos: i + 1, nome: "—" }))).map(l => { const z = zona(l.pos); return `<tr><td style="width:44px"><span class="zpos" style="${z ? `background:${ZONAS[z.tipo][1]};color:#fff` : ""}">${l.pos}</span></td><td>${esc(l.nome)}</td><td><small>${z ? esc(z.nome || ZONAS[z.tipo][0]) : ""}</small></td></tr>`; }).join("");
+      };
+      const desenhar = () => { $("#zlist").innerHTML = zs.map(linha).join("") || `<p class="hint">Sem zonas nesta competição.</p>`; prev();
+        document.querySelectorAll(".zrow [data-k]").forEach(i => i.oninput = () => { ler(); prev(); });
+        document.querySelectorAll(".zrow [data-x]").forEach(b => b.onclick = () => { ler(); zs.splice(+b.closest(".zrow").dataset.i, 1); desenhar(); }); };
+      const N = n || 12;
+      const atalho = { campeao: [1, 4], playoff: [1, 8], subida: [1, 1], playoff_subida: [2, 2], playoff_descida: [Math.max(1, N - 2), Math.max(1, N - 2)], descida: [Math.max(1, N - 1), N] };
+      $("#zadd").onclick = () => { ler(); zs.push({ tipo: "playoff", de: null, ate: null }); desenhar(); };
+      document.querySelectorAll("[data-q]").forEach(b => b.onclick = () => { ler(); const [de, ate] = atalho[b.dataset.q]; zs.push({ tipo: b.dataset.q, de, ate }); desenhar(); });
+      $("#zsave").onclick = async () => {
+        ler();
+        const bons = zs.filter(z => z.de && z.ate);
+        const mal = bons.find(z => z.de > z.ate || (n && z.ate > n));
+        if (mal) return toast(`Verifica a zona “${mal.nome || ZONAS[mal.tipo][0]}”: o primeiro lugar tem de ser menor que o último${n ? ` e não pode passar do ${n}.º` : ""}.`, 1);
+        bons.sort((a, b) => a.de - b.de);
+        const choque = bons.find((z, i) => i && z.de <= bons[i - 1].ate);
+        if (choque) return toast(`Há duas zonas com os mesmos lugares (${choque.de}.º). Cada lugar só pode estar numa zona.`, 1);
+        if (await save("competicoes", { id: c, zonas: bons })) { comp.zonas = bons; zs = bons.map(z => ({ ...z })); desenhar(); }
+      };
+      desenhar();
+    }
+  };
+};
+
 /* --- Mensagens e newsletter --- */
 S.mensagens = async () => {
   const l = await all("mensagens", x => x.order("criado_em", { ascending: false }).limit(300));
@@ -360,7 +409,7 @@ S.definicoes = async () => {
 };
 
 /* ---------- navegação ---------- */
-const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["notificacoes", "Notificações"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
+const NAV = [["painel", "Painel"], ["noticias", "Notícias"], ["jogos", "Jogos e TV"], ["equipa_jornada", "Equipa da jornada"], ["mercado", "Mercado"], ["patrocinios", "Patrocínios"], ["notificacoes", "Notificações"], ["jogadores", "Jogadores"], ["clubes", "Clubes"], ["competicoes", "Competições"], ["zonas", "Zonas das tabelas"], ["mensagens", "Mensagens"], ["newsletter", "Newsletter"], ["definicoes", "Textos do site"]];
 async function route() {
   const h = location.hash.slice(1) || "painel";
   const [path, qs] = h.split("?"); const [sec, id] = path.split("/");

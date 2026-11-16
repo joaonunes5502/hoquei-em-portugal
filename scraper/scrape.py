@@ -8,6 +8,9 @@ Modos:
                                detalhes (timeline, números, técnicos) dos jogos de ontem/hoje.
   python scrape.py completo -> descobre competições novas + tudo o anterior + plantéis
                                de todas as equipas (corre 1x por dia).
+  python scrape.py aovivo   -> fica ligado até às 23:30: jogos a decorrer de 30 em 30 s,
+                               classificações de 5 em 5 min, o resto de 30 em 30 min.
+  python scrape.py auto     -> (agendado) ao vivo entre as 14:30 e as 23:30, rápido fora disso.
 
 Variáveis de ambiente obrigatórias: SUPABASE_URL, SUPABASE_SERVICE_KEY
 """
@@ -26,6 +29,13 @@ VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "").strip()   # chave pr
 VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "").strip() or "mailto:hoqueiemportugues@gmail.com"
 INICIO_JANELA = (-2, 45)    # minutos à volta da hora marcada em que se avisa o início
 FINAL_APOS = 95             # minutos depois da hora marcada a partir dos quais o jogo conta como terminado
+
+# ---- modo ao vivo (hora de Portugal) ----
+JANELA_VIVO = ((14, 30), (23, 30))   # o robô fica ligado entre estas horas
+VIVO_JOGOS = 30                      # segundos entre leituras dos jogos a decorrer
+VIVO_CLASSIFICACAO = 5 * 60          # classificações de todas as competições
+VIVO_RESTO = 30 * 60                 # calendários completos, marcadores e jogos em atraso
+VIVO_LIMITE = int(os.environ.get("SCRAPER_LIMITE", str(5 * 3600 + 40 * 60)))  # o GitHub corta aos 6h; parar antes
 
 RE_EQUIPA = re.compile(r"/Equipa/(\d+)/(\d+)")
 RE_JOGO = re.compile(r"/jogo/(\d+)")
@@ -97,6 +107,17 @@ def to_int(s):
     return int(m.group()) if m else None
 
 
+def id_provisorio(comp_id, numero):
+    """Id negativo e estável para um jogo futuro sem ficha: -(competição*100000 + n.º do jogo).
+    O site sabe converter este id de volta (competição + número) quando a ficha verdadeira aparece."""
+    return -(int(comp_id) * 100000 + int(numero))
+
+
+def ao_vivo_tv(j):
+    """O hp.fpp.pt põe uma ligação tv.fpp.pt/live enquanto o jogo está a decorrer."""
+    return bool(j.get("tv_url")) and "/live" in j["tv_url"]
+
+
 def soup(h):
     return BeautifulSoup(h, "lxml")
 
@@ -141,7 +162,15 @@ def parse_calendar(h, comp_id):
             continue
         a_jogo = tr.find("a", href=RE_JOGO)
         links = tr.find_all("a", href=RE_EQUIPA)
-        if not a_jogo or len(links) < 2:
+        numero = to_int(txt(tds[0]))
+        if len(links) < 2:
+            continue
+        if a_jogo:
+            jid = int(RE_JOGO.search(a_jogo["href"]).group(1))
+        elif numero:
+            # jogo futuro: o hp.fpp.pt ainda não tem ficha -> id provisório (negativo) até a ficha aparecer
+            jid = id_provisorio(comp_id, numero)
+        else:
             continue
         datahora = txt(tds[1])
         dm = re.search(r"(\d{4}-\d{2}-\d{2})", datahora)
@@ -157,11 +186,11 @@ def parse_calendar(h, comp_id):
             if "tv.fpp.pt" in a["href"]:
                 tv = htmlmod.unescape(a["href"])
         jogos.append({
-            "id": int(RE_JOGO.search(a_jogo["href"]).group(1)),
+            "id": jid,
             "competicao_id": comp_id,
             "jornada": jornada or None,
             "jornada_nome": jornada_nome,
-            "numero": to_int(txt(tds[0])),
+            "numero": numero,
             "data": dm.group(1) if dm else None,
             "hora": hm.group(1) if hm else None,
             "casa_id": casa,
@@ -440,6 +469,12 @@ class Robo:
 
     # ---------- uma competição ----------
     def competicao(self, cid):
+        jogos = self.calendario(cid)
+        self.classificacao(cid)
+        self.marcadores(cid)
+        return jogos
+
+    def calendario(self, cid):
         jogos, equipas = parse_calendar(self.get(f"/Competicao/{cid}"), cid)
         self.db.upsert("equipas", [{"id": k, "competicao_id": cid, "nome": v} for k, v in equipas.items()], "id")
 
@@ -449,9 +484,37 @@ class Robo:
                 j["estado"] = "agendado"
             else:
                 k = hora_jogo(j)
+                if ao_vivo_tv(j) and k is not None and agora - k < timedelta(hours=3):
+                    j["estado"] = "provisorio"  # ainda com transmissão em direto: não terminou (atrasos)
+                    continue
                 j["estado"] = "final" if (k is None and j["data"] and j["data"] < self.hoje.isoformat()) or (k is not None and agora - k >= timedelta(minutes=FINAL_APOS)) else "provisorio"
         self.db.upsert("jogos", jogos, "id")
+        self.trocar_provisorios(cid, jogos)
+        self.db.upsert("competicoes", [{"id": cid, "atualizado_em": datetime.now(timezone.utc).isoformat()}], "id")
+        return jogos
 
+    def trocar_provisorios(self, cid, jogos):
+        """Quando um jogo futuro ganha ficha no hp.fpp.pt, passa o que o backoffice/notificações guardaram
+        no id provisório para o id verdadeiro e apaga o provisório."""
+        reais = {id_provisorio(cid, j["numero"]): j["id"] for j in jogos if j["id"] > 0 and j["numero"]}
+        if not reais:
+            return
+        antigos = self.db.select("jogos", f"select=id,canal_tv,destaque,nota&competicao_id=eq.{cid}&id=lt.0")
+        antigos = [a for a in antigos if a["id"] in reais]
+        if not antigos:
+            return
+        ids = ",".join(str(a["id"]) for a in antigos)
+        for a in antigos:
+            extra = {k: a[k] for k in ("canal_tv", "destaque", "nota") if a.get(k)}
+            if extra:
+                self.db.upsert("jogos", [{"id": reais[a["id"]], **extra}], "id")
+        notifs = self.db.select("notificacoes_enviadas", f"select=jogo_id,tipo,destinatarios&jogo_id=in.({ids})")
+        if notifs:
+            self.db.upsert("notificacoes_enviadas", [{**n, "jogo_id": reais[n["jogo_id"]]} for n in notifs], "jogo_id,tipo")
+        self.db.delete("jogos", f"id=in.({ids})")
+        print(f"Competição {cid}: {len(antigos)} jogos futuros ganharam ficha")
+
+    def classificacao(self, cid):
         cls = parse_classificacao(self.get(f"/Classificacao/{cid}"))
         self.db.upsert("clubes", [{"id": r["clube_id"], "nome": base_clube(r["nome"]), "logo_url": r["logo_url"]} for r in cls if r["clube_id"]], "id")
         self.db.upsert("equipas", [{"id": r["equipa_id"], "competicao_id": cid, "nome": r["nome"], "clube_id": r["clube_id"]} for r in cls], "id")
@@ -459,6 +522,7 @@ class Robo:
             self.db.delete("classificacao", f"competicao_id=eq.{cid}")
             self.db.upsert("classificacao", [{k: r[k] for k in ("pos", "equipa_id", "pts", "j", "v", "e", "d", "gm", "gs", "dg")} | {"competicao_id": cid} for r in cls])
 
+    def marcadores(self, cid):
         mk = parse_marcadores(self.get(f"/Marcadores/{cid}"))
         self.db.upsert("clubes", [{"id": m["clube_id"], "nome": base_clube(m["clube_nome"]), "logo_url": m["clube_logo"]} for m in mk if m["clube_id"]], "id")
         self.db.upsert("jogadores", [{"id": m["jogador_id"], "nome": m["nome"], "foto_url": m["foto_url"]} for m in mk], "id")
@@ -468,11 +532,11 @@ class Robo:
             self.db.upsert("marcadores", [{"competicao_id": cid, "jogador_id": m["jogador_id"], "pos": m["pos"], "nome": m["nome"],
                                           "clube_id": m["clube_id"], "golos": m["golos"]} for m in mk
                                          if not (m["jogador_id"] in vistos or vistos.add(m["jogador_id"]))])
-        self.db.upsert("competicoes", [{"id": cid, "atualizado_em": datetime.now(timezone.utc).isoformat()}], "id")
-        return jogos
 
     # ---------- detalhes de um jogo ----------
     def jogo(self, j):
+        if j["id"] < 0:
+            return  # jogo futuro ainda sem ficha no hp.fpp.pt
         h = self.get(f"/jogo/{j['id']}")
         info = parse_jogo(h)
         upd = {"id": j["id"], "arbitros": info["arbitros"], "detalhes_em": datetime.now(timezone.utc).isoformat()}
@@ -513,28 +577,21 @@ class Robo:
         self.db.upsert("plantel", [{"equipa_id": eid, "jogador_id": p["id"], "golos": p["golos"]} for p in e["jogadores"]], "equipa_id,jogador_id")
 
     # ---------- execução ----------
-    def correr(self, modo):
-        comps = self.db.select("competicoes", "select=id,nome&ativa=eq.true&order=ordem,id")
+    def ativas(self):
+        return self.db.select("competicoes", "select=id,nome&ativa=eq.true&order=ordem,id")
+
+    def correr(self, modo, fechar=True):
+        comps = self.ativas()
         if modo == "completo" or not comps:
             self.tentar("descoberta", self.descobrir)
-            comps = self.db.select("competicoes", "select=id,nome&ativa=eq.true&order=ordem,id")
+            comps = self.ativas()
 
         todos = []
         for c in comps:
             r = self.tentar(f"competição {c['id']} ({c['nome']})", self.competicao, c["id"])
             if r:
                 todos += r
-
-        # detalhes: jogos dos últimos 3 dias (resultados podem ser corrigidos) + todos os que ainda não têm detalhes
-        desde = (self.hoje - timedelta(days=3)).isoformat()
-        recentes = [j for j in todos if j["data"] and desde <= j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
-        limite = 2000 if modo == "completo" else MAX_BACKFILL
-        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
-        ids = {j["id"] for j in recentes}
-        fila = recentes + [x for x in sem if x["id"] not in ids]
-        print(f"Detalhes de {len(fila)} jogos")
-        for j in fila:
-            self.tentar(f"jogo {j['id']}", self.jogo, j)
+        self.atrasados(todos, 2000 if modo == "completo" else MAX_BACKFILL)
 
         if modo == "completo":
             eqs = self.db.select("equipas", "select=id,competicao_id&competicao_id=not.is.null")
@@ -544,12 +601,112 @@ class Robo:
                     self.tentar(f"equipa {e['id']}", self.equipa, e["competicao_id"], e["id"])
 
         self.tentar("notificações", self.notificar)
+        if fechar:
+            return self.fim(modo, len(comps))
 
-        self.db.upsert("definicoes", [{"chave": "ultima_atualizacao", "valor": {
-            "quando": datetime.now(timezone.utc).isoformat(), "modo": modo, "pedidos": self.pedidos,
-            "competicoes": len(comps), "erros": self.erros[-20:]}}], "chave")
+    def atrasados(self, todos, limite):
+        """Detalhes: jogos dos últimos 3 dias (resultados podem ser corrigidos) + os que ainda não têm detalhes."""
+        desde = (self.hoje - timedelta(days=3)).isoformat()
+        recentes = [j for j in todos if j["id"] > 0 and j["data"] and desde <= j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
+        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&id=gt.0&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
+        ids = {j["id"] for j in recentes}
+        fila = recentes + [x for x in sem if x["id"] not in ids]
+        print(f"Detalhes de {len(fila)} jogos")
+        for j in fila:
+            self.tentar(f"jogo {j['id']}", self.jogo, j)
+
+    def fim(self, modo, ncomps):
+        self.estado(modo, ncomps)
         print(f"Feito ({modo}): {self.pedidos} pedidos ao hp.fpp.pt, {len(self.erros)} erros")
         return len(self.erros) == 0 or self.pedidos > 0
+
+    def estado(self, modo, ncomps):
+        self.tentar("estado", self.db.upsert, "definicoes", [{"chave": "ultima_atualizacao", "valor": {
+            "quando": datetime.now(timezone.utc).isoformat(), "modo": modo, "pedidos": self.pedidos,
+            "competicoes": ncomps, "erros": self.erros[-20:]}}], "chave")
+
+    # ---------- modo ao vivo ----------
+    @staticmethod
+    def janela(agora):
+        (h1, m1), (h2, m2) = JANELA_VIVO
+        return agora.replace(hour=h1, minute=m1, second=0, microsecond=0), agora.replace(hour=h2, minute=m2, second=0, microsecond=0)
+
+    @classmethod
+    def modo_auto(cls, agora=None):
+        """Execuções agendadas: dentro da janela (ou até 15 min antes) -> ao vivo; fora -> rápido."""
+        agora = agora or datetime.now(TZ_PT)
+        ini, fim = cls.janela(agora)
+        return "aovivo" if ini - timedelta(minutes=15) <= agora < fim else "rapido"
+
+    def jogos_a_decorrer(self, jogos, agora):
+        """Jogos de hoje entre 15 min antes da hora marcada e o fim (ou até 3h depois, se a FPP se atrasar)."""
+        out = []
+        for j in jogos:
+            k = hora_jogo(j)
+            if k is None or j.get("estado") == "final":
+                continue
+            mins = (agora - k).total_seconds() / 60
+            if -15 <= mins <= 180:
+                out.append(j)
+        return out
+
+    def ao_vivo(self):
+        arranque = time.time()
+        agora = datetime.now(TZ_PT)
+        ini, fim = self.janela(agora)
+        if agora < ini - timedelta(minutes=15) or agora >= fim:
+            # lançado à mão fora do horário: sessão de teste de 30 minutos
+            ini, fim = agora, agora + timedelta(minutes=30)
+            print("Fora do horário dos jogos: sessão de teste de 30 minutos")
+        if agora < ini:
+            espera = (ini - agora).total_seconds()
+            print(f"À espera das {ini:%H:%M} ({espera/60:.0f} min)")
+            time.sleep(espera)
+        print(f"Modo ao vivo até às {fim:%H:%M}")
+        self.correr("rapido", fechar=False)
+        comps = self.ativas()
+        t_cls = t_resto = t_estado = time.time()
+        voltas = 0
+        while True:
+            tick = time.time()
+            agora = datetime.now(TZ_PT)
+            if agora >= fim:
+                print("Fim da janela do modo ao vivo")
+                break
+            if tick - arranque >= VIVO_LIMITE:
+                print("Limite de tempo do GitHub: a próxima execução continua")
+                break
+            self.hoje = agora.date()
+
+            if tick - t_resto >= VIVO_RESTO:
+                comps = self.ativas() or comps
+                todos = []
+                for c in comps:
+                    todos += self.tentar(f"competição {c['id']} ({c['nome']})", self.competicao, c["id"]) or []
+                self.atrasados(todos, MAX_BACKFILL)
+                t_resto = t_cls = tick
+            elif tick - t_cls >= VIVO_CLASSIFICACAO:
+                for c in comps:
+                    self.tentar(f"classificação {c['id']}", self.classificacao, c["id"])
+                t_cls = tick
+
+            hoje = self.db.select("jogos", f"select=id,competicao_id,data,hora,estado&data=eq.{self.hoje.isoformat()}") or []
+            ativos = {c["id"] for c in comps}
+            vivos = [j for j in self.jogos_a_decorrer(hoje, agora) if j["competicao_id"] in ativos]
+            for cid in sorted({j["competicao_id"] for j in vivos}):
+                frescos = self.tentar(f"calendário {cid}", self.calendario, cid) or []
+                for j in self.jogos_a_decorrer([x for x in frescos if x["data"] == self.hoje.isoformat()], agora):
+                    if j["id"] > 0:
+                        self.tentar(f"jogo {j['id']}", self.jogo, j)
+            self.tentar("notificações", self.notificar)
+
+            voltas += 1
+            if tick - t_estado >= VIVO_CLASSIFICACAO:
+                self.estado("ao vivo", len(comps))
+                t_estado = tick
+                print(f"{agora:%H:%M} · {voltas} voltas · {len(vivos)} jogos a decorrer · {self.pedidos} pedidos · {len(self.erros)} erros")
+            time.sleep(max(5, VIVO_JOGOS - (time.time() - tick)))
+        return self.fim("ao vivo", len(comps))
 
     # ---------- notificações (início e resultado final) ----------
     def notificar(self):
@@ -645,6 +802,14 @@ if __name__ == "__main__":
     url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_KEY")
     if not url or not key:
         sys.exit("Faltam os segredos SUPABASE_URL e SUPABASE_SERVICE_KEY (GitHub > Settings > Secrets and variables > Actions).")
-    modo = (sys.argv[1] if len(sys.argv) > 1 else "rapido").lower()
-    ok = Robo(DB(url, key)).correr("completo" if modo.startswith("comp") else "rapido")
+    modo = (sys.argv[1] if len(sys.argv) > 1 else "auto").lower().replace(" ", "")
+    if modo == "auto":
+        modo = Robo.modo_auto()
+    robo = Robo(DB(url, key))
+    if modo.startswith("comp"):
+        ok = robo.correr("completo")
+    elif modo in ("aovivo", "vivo"):
+        ok = robo.ao_vivo()
+    else:
+        ok = robo.correr("rapido")
     sys.exit(0 if ok else 1)

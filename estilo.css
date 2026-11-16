@@ -480,3 +480,12 @@ footer .bot{display:flex;justify-content:space-between;font-family:"IBM Plex Mon
 #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%) translateY(30px);opacity:0;background:var(--ink);color:var(--paper);padding:12px 18px;border-radius:999px;font-weight:600;font-size:14px;z-index:130;transition:.25s;max-width:92vw;text-align:center;pointer-events:none}
 #toast.show{opacity:1;transform:translateX(-50%)}
 @media(min-width:721px){#modal{align-items:center}#toast{bottom:30px}}
+
+/* zonas da classificação */
+tr[data-z] .pos{background:var(--zc);color:#fff}
+tr[data-z] td:first-child{box-shadow:inset 4px 0 var(--zc)}
+.zleg{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;font-size:13px;color:var(--ink-2)}
+.zleg span{display:inline-flex;align-items:center;gap:7px}
+.zleg i{width:12px;height:12px;border-radius:50%;flex:none}
+.zleg small{font-family:"IBM Plex Mono";font-size:11px;opacity:.8}
+@media (max-width:720px){.zleg{font-size:12px;gap:6px 14px}}

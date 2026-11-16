@@ -15,7 +15,7 @@ window.HP_DEMO = (function () {
   const equipas = clubes.map(c => ({ id: eqId[c.id], competicao_id: 493, clube_id: c.id, nome: c.nome }));
   equipas.push({ id: 1203, competicao_id: 494, clube_id: 123, nome: 'J. Pacense "B"' }, { id: 1300, competicao_id: 511, clube_id: 123, nome: "J. Pacense" });
   const competicoes = [
-    { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1, menu: "principal" },
+    { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1, menu: "principal", zonas: [{ tipo: "campeao", de: 1, ate: 8, nome: "Play-off do título" }, { tipo: "descida", de: 13, ate: 14 }] },
     { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
     { id: 511, nome: "CN Sub 23 Norte", grupo: "Campeonato Nacional Sub 23", nome_curto: null, ativa: true, principal: false, ordem: 4, menu: "mais" },
     { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "mais" }

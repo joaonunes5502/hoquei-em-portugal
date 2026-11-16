@@ -122,6 +122,13 @@ function forma(jogos, eid) {
     .map(j => { const g = j.casa_id === eid ? j.golos_casa - j.golos_fora : j.golos_fora - j.golos_casa; return g > 0 ? "V" : g < 0 ? "D" : "E"; });
 }
 const formaHTML = f => f.map(x => `<span class="fm ${x}">${x}</span>`).join("");
+/* zonas da classificação (definidas no backoffice > Zonas das tabelas) */
+const ZONAS = { campeao: ["Play-off de apuramento de campeão", "#C9A227"], playoff: ["Play-off", "#2F6FB5"], subida: ["Sobe de divisão", "#1E8E5A"], playoff_subida: ["Play-off de subida", "#62B88E"], playoff_descida: ["Play-off de descida", "#E08A2E"], descida: ["Desce de divisão", "#C0392B"] };
+const zonasDe = c => (Array.isArray(c?.zonas) ? c.zonas : []).filter(z => ZONAS[z.tipo] && +z.de > 0 && +z.ate >= +z.de);
+const zonaPos = (c, pos) => zonasDe(c).find(z => pos >= +z.de && pos <= +z.ate);
+const zonaAttr = (c, pos) => { const z = zonaPos(c, pos); return z ? ` data-z="${z.tipo}" style="--zc:${ZONAS[z.tipo][1]}" title="${esc(z.nome || ZONAS[z.tipo][0])}"` : ""; };
+const ordinal = n => n + ".º";
+const zonasLegenda = c => { const zs = zonasDe(c); return zs.length ? `<div class="zleg">${zs.map(z => `<span><i style="background:${ZONAS[z.tipo][1]}"></i>${esc(z.nome || ZONAS[z.tipo][0])} <small>${+z.de === +z.ate ? ordinal(z.de) : ordinal(z.de) + "–" + ordinal(z.ate)}</small></span>`).join("")}</div>` : ""; };
 const ultimaJornada = jogos => { const js = jogos.filter(j => j.golos_casa != null && j.jornada).map(j => j.jornada); return js.length ? Math.max(...js) : (jogos[0]?.jornada || 1); };
 
 /* ---------------- menu, placar, pesquisa ---------------- */
@@ -183,7 +190,7 @@ async function pHome() {
   { const sp = sponsor("inicio"); if (sp) s += `<div class="wrap" style="margin-top:10px">${sp}</div>`; }
   if (c) s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px">
     <div>${sh("02", (last[0]?.jornada_nome || "Jornada"), ["Todos os jogos", `#/competicao/${c.id}/1`])}<div class="mini">${last.map(j => `<a class="r" href="#/jogo/${j.id}"><span class="a">${esc(tName(j.casa_id))} ${crest(j.casa_id)}</span><span class="s">${score(j) || esc(j.hora || "—")}</span><span>${crest(j.fora_id)}${esc(tName(j.fora_id))}</span></a>`).join("") || empty("Sem jogos.")}</div></div>
-    <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
+    <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr${zonaAttr(c, r.pos)}><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>${zonasLegenda(c)}` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="grid-template-columns:${ej.length ? "1.4fr 1fr" : "1fr"};gap:56px">
     ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}${sponsor("equipa_jornada")}</div>` : ""}
     <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span><b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
@@ -234,7 +241,7 @@ async function pComp(id, tab) {
   const chips = compPicker(c, tab);
   let body = "", after;
   if (tab === 0) {
-    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr class="${r.pos <= 4 ? "q" : ""}"><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>` : empty("Esta prova não tem classificação (ou ainda não começou).");
+    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr${zonaAttr(c, r.pos)}><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>${zonasLegenda(c)}` : empty("Esta prova não tem classificação (ou ainda não começou).");
   } else if (tab === 1) {
     const jors = [...new Set(jogos.map(j => j.jornada))].filter(x => x != null).sort((a, b) => a - b);
     let cur = ultimaJornada(jogos);
@@ -294,7 +301,12 @@ function linhaDeJogo(j, ev, filtro) {
 }
 
 async function pJogo(id) {
-  const j = (await q("jogos", { eq: { id: +id } }))[0];
+  let j = (await q("jogos", { eq: { id: +id } }))[0];
+  if (!j && +id < 0) { // jogo futuro (id provisório) que entretanto ganhou ficha no hp.fpp.pt
+    const cid = Math.floor(-id / 100000), num = -id % 100000;
+    j = (await q("jogos", { eq: { competicao_id: cid, numero: num } }))[0];
+    if (j) try { history.replaceState(null, "", "#/jogo/" + j.id); } catch (e) { }
+  }
   if (!j) return { html: hd([], "Jogo não encontrado") };
   const c = compById(j.competicao_id), dur = c?.duracao_parte || 25;
   const [ev0, pc, pf] = await Promise.all([q("eventos", { eq: { jogo_id: j.id }, order: [["ordem", true]] }), q("plantel", { eq: { equipa_id: j.casa_id } }), q("plantel", { eq: { equipa_id: j.fora_id } })]);
