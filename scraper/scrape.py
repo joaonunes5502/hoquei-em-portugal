@@ -40,6 +40,7 @@ VIVO_LIMITE = int(os.environ.get("SCRAPER_LIMITE", str(5 * 3600 + 40 * 60)))  # 
 RE_EQUIPA = re.compile(r"/Equipa/(\d+)/(\d+)")
 RE_JOGO = re.compile(r"/jogo/(\d+)")
 RE_JOGO_TACA = re.compile(r"/jogoTaca/(\d+)")
+EUROPA = 1_500_000_000  # jogos das competições europeias (lidos pelo europa.py): a partir deste id não são do hp.fpp.pt
 TACA = 1_000_000_000   # os jogos das taças têm outra numeração no hp.fpp.pt (/jogoTaca/N) -> guardados como TACA + N
 RE_CLUBE = re.compile(r"CLUBE_(\d+)\.", re.I)
 RE_FED = re.compile(r"FED_(\d+)\.", re.I)
@@ -83,7 +84,7 @@ def sufixo(n):
 
 def escalao(comp):
     t = _norm((comp or {}).get("nome", "") + " " + ((comp or {}).get("grupo") or ""))
-    if "femin" in t:
+    if "femin" in t or "women" in t:
         return "F"
     m = re.search(r"sub\s*-?\s*(\d+)", t)
     return "S" + m.group(1) if m else ""
@@ -582,8 +583,8 @@ class Robo:
 
     # ---------- detalhes de um jogo ----------
     def jogo(self, j):
-        if j["id"] < 0:
-            return  # jogo futuro ainda sem ficha no hp.fpp.pt
+        if j["id"] < 0 or j["id"] >= EUROPA:
+            return  # jogo futuro ainda sem ficha no hp.fpp.pt, ou jogo europeu
         h = self.get(f"/jogoTaca/{j['id'] - TACA}" if j["id"] >= TACA else f"/jogo/{j['id']}")
         info = parse_jogo(h)
         upd = {"id": j["id"], "arbitros": info["arbitros"], "detalhes_em": datetime.now(timezone.utc).isoformat()}
@@ -633,7 +634,7 @@ class Robo:
 
     # ---------- execução ----------
     def ativas(self):
-        return self.db.select("competicoes", "select=id,nome&ativa=eq.true&order=ordem,id")
+        return self.db.select("competicoes", "select=id,nome&ativa=eq.true&id=lt.900000&order=ordem,id")  # 900000+ = competições europeias (não vêm do hp.fpp.pt)
 
     def correr(self, modo, fechar=True):
         comps = self.ativas()
@@ -663,7 +664,7 @@ class Robo:
         """Detalhes: jogos dos últimos 3 dias (resultados podem ser corrigidos) + os que ainda não têm detalhes."""
         desde = (self.hoje - timedelta(days=3)).isoformat()
         recentes = [j for j in todos if j["id"] > 0 and j["data"] and desde <= j["data"] <= self.hoje.isoformat() and j["golos_casa"] is not None]
-        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&id=gt.0&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
+        sem = self.db.select("jogos", f"select=id,casa_id,fora_id&id=gt.0&id=lt.1500000000&golos_casa=not.is.null&detalhes_em=is.null&order=data.desc&limit={limite}")
         ids = {j["id"] for j in recentes}
         fila = recentes + [x for x in sem if x["id"] not in ids]
         print(f"Detalhes de {len(fila)} jogos")

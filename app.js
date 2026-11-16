@@ -103,20 +103,65 @@ function provas() {
 }
 const cardSub = c => { const p = provaDe(c); if (!p) return ""; const l = separadores(p.comps).map(x => x.label).filter(Boolean); return l.length ? l.join(" · ") : (p.taca ? "Taça · eliminatórias" : "Fase regular"); };
 const provaDe = c => c ? provas().find(p => p.k === provaId(c)) : null;
+/* ---- competições europeias: tema de cores + intro ---- */
+const europeia = c => !!c && (c.id >= 900000 || /\bWSE\b|world\s*skate/i.test(c.nome));
+function temaAuto(nome) {
+  const t = norm(nome || ""), fem = /women|femin/.test(t);
+  if (!/\bwse\b|world\s*skate/.test(t)) return null;
+  if (/champions/.test(t)) return fem ? "#D4317A" : "#1746A2";
+  if (/trophy|trofeu/.test(t)) return "#B8730C";
+  if (/cup|taca/.test(t)) return "#12804A";
+  return null;
+}
+const temaDe = P => { if (!P) return null; const m = P.comps.map(c => c.tema_cor).find(x => /^#[0-9a-f]{6}$/i.test(x || "")); return m || temaAuto(P.comps[0].nome); };
+const mistura = (hex, alvo, q) => "#" + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * (1 - q) + alvo * q).toString(16).padStart(2, "0")).join("");
+let temaAtual = null, provaAtual = null;
+function aplicarTema(cor) {
+  temaAtual = cor || null;
+  const r = document.documentElement, escuro = r.dataset.theme === "dark";
+  if (!cor) { r.style.removeProperty("--red"); r.style.removeProperty("--red-d"); delete r.dataset.tema; }
+  else { r.style.setProperty("--red", escuro ? mistura(cor, 255, .38) : cor); r.style.setProperty("--red-d", mistura(cor, 0, .28)); r.dataset.tema = "1"; }
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", cor ? mistura(cor, 0, .28) : "#5e1520");
+}
+function intro(P, cor) {
+  document.getElementById("intro")?.remove();
+  const nome = P.nome.replace(/\bPLACARD\b/gi, "").trim(), wse = /^wse\s+/i.test(nome);
+  const palavras = nome.replace(/^wse\s+/i, "").split(/\s+/), fem = /^(women|feminina?)$/i.test(palavras[palavras.length - 1] || "") && palavras.length > 1 ? palavras.pop() : "";
+  const el = document.createElement("div");
+  el.id = "intro"; el.setAttribute("aria-hidden", "true");
+  el.style.setProperty("--c", cor); el.style.setProperty("--c2", mistura(cor, 0, .55)); el.style.setProperty("--c3", mistura(cor, 255, .45));
+  el.innerHTML = `<i class="in-ring"></i><i class="in-ring r2"></i><div class="in-stage">${wse ? `<span class="in-kick">World Skate Europe</span>` : ""}<h2 class="in-3d x">${palavras.map((w, i) => `<span style="--i:${i}">${esc(w)}</span>`).join("")}</h2>${fem ? `<span class="in-tag">${esc(fem)}</span>` : ""}<span class="in-sub">Época 2026/27</span></div><i class="in-shine"></i>`;
+  document.body.appendChild(el);
+  const calmo = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (calmo) el.classList.add("calmo");
+  let fechado = false;
+  const fechar = () => { if (fechado) return; fechado = true; el.classList.add("sai"); setTimeout(() => el.remove(), calmo ? 250 : 650); document.removeEventListener("keydown", tecla); };
+  const tecla = e => { if (e.key === "Escape" || e.key === "Enter" || e.key === " ") fechar(); };
+  el.onclick = fechar; document.addEventListener("keydown", tecla);
+  setTimeout(fechar, calmo ? 900 : 2300);
+}
+// chamado pelo router: entra/sai do tema ao entrar/sair de uma competição
+function temaRota(p) {
+  const c = p[0] === "competicao" ? compById(+p[1]) : null, P = c ? provaDe(c) : null, cor = temaDe(P);
+  const k = P && cor ? P.k : null;
+  if (k && k !== provaAtual) intro(P, cor);
+  provaAtual = k;
+  if ((cor || null) !== temaAtual || cor) aplicarTema(cor);
+}
 const pn = c => provaDe(c)?.nome || cn(c);
 // provas do menu principal vs "mais competições" (definido no backoffice; se nada estiver definido, as 6 primeiras)
 const compsPrincipais = () => { const ps = provas(), p = ps.filter(x => x.menu === "principal"); return (p.length ? p : ps.slice(0, 6)).map(x => x.rep); };
 const compsMais = () => { const p = new Set(compsPrincipais().map(provaId)); return provas().filter(x => !p.has(x.k)).map(x => x.rep); };
 function compPicker(c, tab) {
   const mais = compsMais(), k = provaId(c);
-  return `<div class="cpick"><div class="chips cp-chips">${compsPrincipais().map(x => `<a class="chip ${provaId(x) === k ? "on" : ""}" href="#/competicao/${x.id}">${esc(pn(x))}</a>`).join("")}</div>${mais.length ? `<select class="input cp-sel" onchange="if(this.value)go('/competicao/'+this.value)"><option value="">Mais competições ▾</option>${mais.map(x => `<option value="${x.id}" ${provaId(x) === k ? "selected" : ""}>${esc(pn(x))}</option>`).join("")}</select>` : ""}</div>`;
+  return `<div class="cpick"><div class="chips cp-chips">${compsPrincipais().map(x => `<a class="chip ${provaId(x) === k ? "on" : ""}" href="#/competicao/${x.id}">${esc(pn(x))}</a>`).join("")}</div>${mais.length ? `<select class="input cp-sel" onchange="if(this.value)go('/competicao/'+this.value)"><option value="">Mais competições ▾</option>${mais.filter(x => !europeia(x)).map(x => `<option value="${x.id}" ${provaId(x) === k ? "selected" : ""}>${esc(pn(x))}</option>`).join("")}${mais.some(europeia) ? `<optgroup label="Europa">${mais.filter(europeia).map(x => `<option value="${x.id}" ${provaId(x) === k ? "selected" : ""}>${esc(pn(x))}</option>`).join("")}</optgroup>` : ""}</select>` : ""}</div>`;
 }
 const cn = c => c ? (c.nome_curto || c.nome) : "";
 const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
 const sufixo = n => (clean(n).match(/\s([B-D])$/) || [])[1];
 // cada equipa é "clube + letra" (123 = principal, 123-B = equipa B); junta a mesma equipa em várias competições
 // escalão pela competição: femininas e sub-23 são equipas diferentes do mesmo clube
-const escalao = c => { const n = norm((c?.nome || "") + " " + (c?.grupo || "")); if (/femin/.test(n)) return "F"; const s = /sub\s*-?\s*(\d+)/.exec(n); return s ? "S" + s[1] : ""; };
+const escalao = c => { const n = norm((c?.nome || "") + " " + (c?.grupo || "")); if (/femin|women/.test(n)) return "F"; const s = /sub\s*-?\s*(\d+)/.exec(n); return s ? "S" + s[1] : ""; };
 const ESC_NOME = { F: "Feminino" };
 const escNome = k => ESC_NOME[k] || (k ? "Sub-" + k.slice(1) : "");
 const teamKey = eid => { const e = B.equipas.get(eid); if (!e || e.passagem) return ""; if (!e.clube_id) return "e" + e.id; const s = sufixo(e.nome), x = escalao(compById(e.competicao_id)); return e.clube_id + (s ? "-" + s : "") + (x ? "-" + x : ""); };
@@ -175,7 +220,7 @@ const ultimaJornada = jogos => { const js = jogos.filter(j => j.golos_casa != nu
 function buildMenu() {
   const sm = (t, l) => `<h5>${t}</h5><div class="sm">${l.map(a => `<a href="${a[1]}" ${/^http/.test(a[1]) ? 'target="_blank"' : ""}>${esc(a[0])}</a>`).join("")}</div>`;
   $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(pn(c))}</a>`).join("")}</div>
-  <div>${sm("Mais competições", compsMais().map(c => [pn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
+  <div>${sm("Mais competições", compsMais().filter(c => !europeia(c)).map(c => [pn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}${compsMais().some(europeia) ? sm("Europa", compsMais().filter(europeia).map(c => [pn(c), "#/competicao/" + c.id])) : ""}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
   <div>${sm("A tua app", [["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
   $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(pn(c))}</a>`).join("");
@@ -284,7 +329,7 @@ async function pComp(id, tab) {
   const chips = compPicker(c, tab);
   let body = "", after;
   if (tab === 0) {
-    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr${zonaAttr(c, r.pos)}><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>${zonasLegenda(c)}` : empty("Esta prova não tem classificação (ou ainda não começou).");
+    body = cls.length ? `<div style="overflow-x:auto"><table class="ctab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c hm">V</th><th class="c hm">E</th><th class="c hm">D</th><th class="c hm">Golos</th><th class="c">DG</th><th class="c">Pts</th><th class="hm">Forma</th></tr></thead><tbody>${cls.map(r => `<tr${zonaAttr(c, r.pos)}><td><span class="pos">${r.pos}</span></td><td style="white-space:nowrap;font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num hm">${r.v}</td><td class="c num hm">${r.e}</td><td class="c num hm">${r.d}</td><td class="c num hm">${r.gm}:${r.gs}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td><td class="hm" style="white-space:nowrap">${formaHTML(forma(jogos, r.equipa_id))}</td></tr>`).join("")}</tbody></table></div>${zonasLegenda(c)}` : empty(europeia(c) ? "Os jogos e a classificação desta competição europeia chegam em breve." : "Esta prova não tem classificação (ou ainda não começou).");
   } else if (tab === 1) {
     const jors = [...new Set(jogos.map(j => j.jornada))].filter(x => x != null).sort((a, b) => a - b);
     let cur = ultimaJornada(jogos);
@@ -327,14 +372,25 @@ function quadro(jogos, comps) {
     if (!ult && lista.length) { const n = lista[lista.length - 1].jogos.length; tam = n >= 16 ? 16 : n >= 8 ? 8 : n >= 4 ? 4 : n >= 2 ? 2 : 1; if (n >= 8) tam = Math.min(tam, 8); }
     for (; tam >= 1; tam /= 2) lista.push({ nome: RONDA_NOME[tam] || "Ronda", tam, jogos: [], futura: true });
   }
-  lista.forEach(r => { if (r.tam && r.jogos.length < r.tam) r.vazios = r.tam - r.jogos.length; });
+  const prontas = () => lista.forEach(r => { r.cartoes = cartoes(r.jogos); if (r.tam && r.cartoes.length < r.tam) r.vazios = r.tam - r.cartoes.length; });
   const vencedor = j => j.golos_casa == null || j.golos_casa === j.golos_fora ? null : (j.golos_casa > j.golos_fora ? "c" : "f");
   const lado = (j, l) => { const id = l === "c" ? j.casa_id : j.fora_id, g = l === "c" ? j.golos_casa : j.golos_fora, w = vencedor(j);
     return `<div class="bt ${w === l ? "w" : w ? "l" : ""}">${crest(id, 20)}<span class="n">${esc(tName(id))}</span><b>${g ?? ""}</b></div>`; };
+  const par = j => [j.casa_id, j.fora_id].sort((x, y) => x - y).join("-");
+  const duasMaos = (a, b) => { // a = 1.ª mão; o cartão mostra as equipas pela ordem da 1.ª mão e o total das duas
+    const feito = a.golos_casa != null && b.golos_casa != null, tc = feito ? a.golos_casa + b.golos_fora : null, tf = feito ? a.golos_fora + b.golos_casa : null;
+    const w = !feito || tc === tf ? null : tc > tf ? "c" : "f";
+    const l = (id, t, k) => `<div class="bt ${w === k ? "w" : w ? "l" : ""}">${crest(id, 20)}<span class="n">${esc(tName(id))}</span><b>${t ?? ""}</b></div>`;
+    const mao = (j, n) => `<a href="#/jogo/${j.id}">${n}.ª mão · ${j.golos_casa != null ? j.golos_casa + "-" + j.golos_fora : (j.data ? j.data.slice(8, 10) + "/" + j.data.slice(5, 7) : "a definir") + (j.hora ? " " + esc(j.hora) : "")}</a>`;
+    return `<div class="bm duas"><div class="bi"><span>2 mãos</span>${feito ? "<span>total</span>" : ""}</div>${l(a.casa_id, tc, "c")}${l(a.fora_id, tf, "f")}<div class="bmaos">${mao(a, 1)}${mao(b, 2)}</div></div>`;
+  };
+  const cartoes = jogos => { const m = new Map(); jogos.forEach(j => { const k = par(j); m.has(k) ? m.get(k).push(j) : m.set(k, [j]); });
+    return [...m.values()].map(g => g.length === 2 ? duasMaos(...g.sort((x, y) => (x.data || "9").localeCompare(y.data || "9"))) : g.map(cartao).join("")); };
   const cartao = j => { const reg = (REGIAO.exec(j.jornada_nome || "") || [""])[0].replace(/^[\s\-–·]+/, "");
     return `<a class="bm" href="#/jogo/${j.id}"><div class="bi"><span>${esc(fmtD(j.data))}${j.hora ? " · " + esc(j.hora) : ""}</span>${reg ? `<span>${esc(reg)}</span>` : ""}</div>${lado(j, "c")}${lado(j, "f")}</a>`; };
+  prontas();
   const vazio = `<div class="bm vz"><div class="bt"><span class="crest" style="width:20px;height:20px"></span><span class="n">A definir</span></div><div class="bt"><span class="crest" style="width:20px;height:20px"></span><span class="n">A definir</span></div></div>`;
-  return `<div class="bracket-wrap"><div class="bracket">${lista.map((r, i) => `<div class="bcol ${r.futura ? "fut" : ""} ${i === lista.length - 1 ? "last" : ""}"><div class="bh"><span>${esc(r.nome)}</span><small>${r.jogos.length ? r.jogos.length + (r.jogos.length === 1 ? " jogo" : " jogos") : "por sortear"}</small></div><div class="bgames">${r.jogos.map(cartao).join("")}${vazio.repeat(Math.min(r.vazios || 0, 16))}</div></div>`).join("")}</div></div>
+  return `<div class="bracket-wrap"><div class="bracket">${lista.map((r, i) => `<div class="bcol ${r.futura ? "fut" : ""} ${i === lista.length - 1 ? "last" : ""}"><div class="bh"><span>${esc(r.nome)}</span><small>${r.jogos.length ? r.jogos.length + (r.jogos.length === 1 ? " jogo" : " jogos") : "por definir"}</small></div><div class="bgames">${r.cartoes.join("")}${vazio.repeat(Math.min(r.vazios || 0, 16))}</div></div>`).join("")}</div></div>
     ${fechado ? "" : `<p class="note">As rondas a tracejado ainda não foram sorteadas: aparecem aqui assim que a FPP publicar os jogos.</p>`}`;
 }
 async function pTaca(c, P, seps, sep, tab) {
@@ -347,9 +403,9 @@ async function pTaca(c, P, seps, sep, tab) {
     jogos.forEach(j => { const k = (j.competicao_id + "|" + (j.jornada_nome || "")); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(j); });
     body = [...grupos.values()].map(l => `<h3 class="x" style="font-size:24px;margin:26px 0 12px">${esc(l[0].jornada_nome || "Jogos")}</h3>${l.map(j => matchRow(j)).join("")}`).join("") || empty("Ainda não há jogos publicados.");
   } else {
-    body = quadro(jogos, sep.comps);
+    body = !jogos.length && europeia(c) ? empty("O quadro desta competição europeia chega em breve.") : quadro(jogos, sep.comps);
   }
-  return { html: hd([["Competições"], [P.nome]], P.nome, (sep.label ? sep.label + " · " : "") + "Época 2026/27", ["Quadro", "Jogos"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${compPicker(c, tab)}${zonaChips(seps, sep, tab)}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado automaticamente.</p></div></section>` };
+  return { html: hd([["Competições"], [P.nome]], P.nome, (sep.label ? sep.label + " · " : "") + "Época 2026/27", ["Quadro", "Jogos"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${compPicker(c, tab)}${zonaChips(seps, sep, tab)}${sponsor("competicao")}${body}<p class="note">Fonte: ${europeia(c) ? "World Skate Europe" : "hp.fpp.pt"} · atualizado automaticamente.</p></div></section>` };
 }
 
 /* ---------------- linha de jogo ---------------- */
@@ -435,9 +491,9 @@ async function pJogo(id) {
     </div>
     <div class="grid g2" style="margin-top:44px;gap:56px">
       <div>${st.length ? `<h3 class="x" style="font-size:30px;margin-bottom:18px">Estatísticas</h3><div class="stats">${st.map(s => { const x = +s[1] || 0, y = +s[2] || 0, p = x + y ? Math.round(x / (x + y) * 100) : 50; return `<div class="row"><span class="lab">${s[0]}</span><span class="v">${s[1] ?? 0}</span><span class="bar"><i style="width:${p}%"></i></span><span class="v r">${s[2] ?? 0}</span></div>`; }).join("")}</div>` : ""}</div>
-      <div>${j.arbitros ? `<h3 class="x" style="font-size:30px;margin-bottom:14px">Arbitragem</h3><p>${esc(j.arbitros)}</p>` : ""}${j.nota ? `<div class="box rink-r" style="margin-top:24px">${esc(j.nota)}</div>` : ""}</div>
-    </div>${(pc.length || pf.length) ? `<div class="grid g2" style="margin-top:44px;gap:56px">${[[j.casa_id, pc], [j.fora_id, pf]].map(([eid]) => `<div><h3 class="x" style="font-size:24px;margin-bottom:12px">Plantel · ${esc(tName(eid))}</h3><div id="pl-${eid}" class="mini-squad">A carregar…</div></div>`).join("")}</div>` : ""}
-    <p class="note">Fonte: hp.fpp.pt · minutos calculados a partir do relógio do jogo (partes de ${dur}').</p></div></section>`,
+      <div>${j.arbitros ? `<h3 class="x" style="font-size:30px;margin-bottom:14px">Arbitragem</h3><p>${esc(j.arbitros)}</p>` : ""}${j.ficha?.pavilhao ? `<h3 class="x" style="font-size:30px;margin:26px 0 14px">Pavilhão</h3><p>${esc(j.ficha.pavilhao)}</p>` : ""}${j.nota ? `<div class="box rink-r" style="margin-top:24px">${esc(j.nota)}</div>` : ""}</div>
+    </div>${j.ficha && (j.ficha.casa?.jogadores?.length || j.ficha.fora?.jogadores?.length) ? `<div class="grid g2" style="margin-top:44px;gap:56px">${[[j.casa_id, j.ficha.casa], [j.fora_id, j.ficha.fora]].map(([eid, f]) => `<div><h3 class="x" style="font-size:24px;margin-bottom:12px">Plantel · ${esc(tName(eid))}</h3><div class="mini-squad nomes">${(f?.jogadores || []).map(x => `<span><b>${esc(x.n ?? "")}</b> ${esc(x.nome)}${x.gr ? ` <small>GR</small>` : ""}</span>`).join("") || "<span style='color:var(--ink-2)'>—</span>"}</div>${f?.tecnicos?.length ? `<p class="fic-tec">${f.tecnicos.map(t => `<span>${esc(t.funcao)}: <b>${esc(t.nome)}</b></span>`).join("")}</p>` : ""}</div>`).join("")}</div>` : (pc.length || pf.length) ? `<div class="grid g2" style="margin-top:44px;gap:56px">${[[j.casa_id, pc], [j.fora_id, pf]].map(([eid]) => `<div><h3 class="x" style="font-size:24px;margin-bottom:12px">Plantel · ${esc(tName(eid))}</h3><div id="pl-${eid}" class="mini-squad">A carregar…</div></div>`).join("")}</div>` : ""}
+    <p class="note">Fonte: ${europeia(c) ? "World Skate Europe" : "hp.fpp.pt"} · minutos calculados a partir do relógio do jogo (partes de ${dur}').</p></div></section>`,
     after: async () => {
       if (temEv) { const r = f => { $("#ldj").innerHTML = linhaDeJogo(j, ev, f); document.querySelectorAll(".ldj-fil .chip").forEach(b => b.classList.toggle("on", b.dataset.f === f)); }; document.querySelectorAll(".ldj-fil .chip").forEach(b => b.onclick = () => r(b.dataset.f)); r("tudo"); }
       for (const [eid, p] of [[j.casa_id, pc], [j.fora_id, pf]]) { const el = $("#pl-" + eid); if (!el) continue; const js = await players(p); el.innerHTML = js.map(x => `<a href="#/jogador/${x.id}"><b>${esc(pNum(x) ?? "")}</b> ${esc(pName(x))}</a>`).join("") || "<span style='color:var(--ink-2)'>—</span>"; }
@@ -507,7 +563,7 @@ async function pClubes() {
   const ativos = new Set(B.comps.map(c => c.id));
   const grupos = new Map();
   for (const e of B.equipas.values()) {
-    if (!ativos.has(e.competicao_id)) continue;
+    if (!ativos.has(e.competicao_id) || e.clube_id >= 6000000) continue; // clubes estrangeiros (só competições europeias) não entram na lista
     const k = teamKey(e.id); if (!k) continue;
     const g = grupos.get(k) || { k, eid: e.id, comps: [] }; g.comps.push(compById(e.competicao_id)); grupos.set(k, g);
   }
@@ -601,6 +657,7 @@ async function go(path) {
   const R = { "": pHome, noticias: pNoticias, noticia: pNoticia, competicao: pComp, jogo: pJogo, clubes: pClubes, clube: pClube, jogador: pJogador, mercado: pMercado, "onde-ver": pTV, "equipa-da-jornada": pEDJ, selecoes: pSelecoes, sobre: pSobre, privacidade: pPrivacidade, notificacoes: pSeguir };
   const top = { competicao: "comp", jogo: "comp", noticias: "news", noticia: "news", clubes: "clubs", clube: "clubs", jogador: "clubs", mercado: "mkt", "onde-ver": "tv" }[p[0]] || "";
   closeMenu();
+  temaRota(p);
   $("#app").innerHTML = `<div class="wrap" style="padding:80px 28px"><span class="lbl">A carregar…</span></div>`;
   try {
     const r = await (R[p[0]] || pHome)(p[1], p[2]);
@@ -615,7 +672,7 @@ window.addEventListener("hashchange", () => { const h = location.hash.slice(1); 
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
 
 /* ---------------- tema e arranque ---------------- */
-function setTheme(t) { document.documentElement.dataset.theme = t; $("#themeBtn").textContent = t === "dark" ? "☀" : "☾"; try { localStorage.setItem("hp-theme", t); } catch (e) { } }
+function setTheme(t) { document.documentElement.dataset.theme = t; if (temaAtual) aplicarTema(temaAtual); $("#themeBtn").textContent = t === "dark" ? "☀" : "☾"; try { localStorage.setItem("hp-theme", t); } catch (e) { } }
 (async function init() {
   let th = "light"; try { th = localStorage.getItem("hp-theme") || "light"; } catch (e) { }
   setTheme(th);

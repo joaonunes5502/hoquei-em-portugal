@@ -21,7 +21,8 @@ window.HP_DEMO = (function () {
     { id: 509, nome: "Elite Cup Masculina", grupo: "Elite Cup", grupo_id: 15, nome_curto: null, ativa: true, principal: false, ordem: 5, menu: "principal" },
     { id: 510, nome: "Elite Cup Feminina", grupo: "Elite Cup", grupo_id: 15, nome_curto: null, ativa: true, principal: false, ordem: 5, menu: "principal" },
     { id: 511, nome: "CN Sub 23 Norte", grupo: "Campeonato Nacional Sub 23", nome_curto: null, ativa: true, principal: false, ordem: 4, menu: "mais" },
-    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", grupo_id: 20, nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "principal" }
+    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", grupo_id: 20, nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "principal" },
+    ...["WSE Champions League", "WSE Champions League Women", "WSE Cup", "WSE Cup Women", "WSE Trophy"].map((nome, i) => ({ id: 900001 + i, nome, grupo: nome, grupo_id: 9001 + i, nome_curto: null, ativa: true, principal: false, ordem: 50 + i, menu: "mais", formato: i < 2 ? "liga" : "auto" }))
   ];
   // jornadas 1 e 2 reais; o resto é calendário de exemplo
   const R = [
@@ -54,6 +55,12 @@ window.HP_DEMO = (function () {
     TJ(-50801545, 508, "Pré Eliminatória Norte", 1, 1545, "2026-11-29", "18:30", null, null, null, null, "CAR Taipense", "Escola Livre A"),
     TJ(-50801550, 508, "Pré Eliminatória Sul", 2, 1550, "2026-11-28", "17:30", null, null, null, null, "ACR Santa Cita", "GD Estreito"),
     TJ(-50801551, 508, "Pré Eliminatória Sul", 2, 1551, "2026-11-28", "18:00", null, null, null, null, "OH Sports", "CD Boliqueime"));
+  // WSE Cup (exemplo): oitavos a duas mãos
+  const EJ = (id, data, hora, casa, fora, gc, gf) => TJ(1600000000 + id, 900003, "Oitavos de Final", 92, null, data, hora, casa, fora, gc, gf);
+  jogos.push(EJ(1, "2026-12-12", "17:00", 1182, 1178, 3, 2), EJ(2, "2027-01-23", "18:00", 1178, 1182, 1, 3), EJ(3, "2026-12-12", "18:00", 1186, 1167, 2, 2), EJ(4, "2027-01-23", null, 1167, 1186, null, null));
+  Object.assign(jogos.find(j => j.id === 1600000001), { arbitros: "Joseph Silecchia, Francesco Stallone", faltas_casa: 9, faltas_fora: 10, ficha: { pavilhao: "Pavilhão Municipal de Paços de Ferreira",
+    casa: { jogadores: [{ n: 1, nome: "Àlvaro Shehda", gr: true }, { n: 74, nome: "Joca Guimarães" }, { n: 9, nome: "Miccoli" }, { n: 5, nome: "Zé Miguel" }], tecnicos: [{ funcao: "Treinador", nome: "Hugo Azevedo" }] },
+    fora: { jogadores: [{ n: 10, nome: "Marc Grau-Tallada", gr: true }, { n: 7, nome: "Carlo di Benedetto" }], tecnicos: [{ funcao: "Treinador", nome: "Ricardo Ares Lozano" }] } } });
   // classificação calculada a partir dos jogos
   const t = {};
   equipas.forEach(e => t[e.id] = { competicao_id: 493, equipa_id: e.id, pts: 0, j: 0, v: 0, e: 0, d: 0, gm: 0, gs: 0 });
@@ -108,5 +115,8 @@ window.HP_DEMO = (function () {
     { id: "sp3", nome: "Parceiro A", imagem_url: null, link: "#/sobre", texto: "Parceiro A", posicao: "rodape", ativo: true, ordem: 1 },
     { id: "sp4", nome: "Parceiro B", imagem_url: null, link: "#/sobre", texto: "Parceiro B", posicao: "rodape", ativo: true, ordem: 2 },
     { id: "sp5", nome: "Exemplo", imagem_url: null, link: "#/sobre", texto: "A tua marca", posicao: "equipa_jornada", ativo: true, ordem: 1 }];
+  [["1ª Parte", "23:24", "golo", "casa", "Miccoli"], ["1ª Parte", "17:48", "golo", "casa", "Joca Guimarães"], ["1ª Parte", "04:10", "golo", "fora", "Marc Grau-Tallada"], ["2ª Parte", "22:50", "golo_penalti", "fora", "Carlo di Benedetto"],
+   ["2ª Parte", "16:31", "azul", "fora", "Carlo di Benedetto"], ["2ª Parte", "05:44", "golo", "casa", "Joca Guimarães"], ["2ª Parte", "05:44", "desconto", "fora", null], ["2ª Parte", "00:15", "livre_falhado", "casa", "Miccoli"]]
+    .forEach((e, i) => eventos.push({ id: 900 + i, jogo_id: 1600000001, ordem: i, parte: e[0], tempo: e[1], tipo: e[2], lado: e[3], jogador: e[4], jogador_id: null }));
   return { patrocinios, competicoes, clubes, equipas, classificacao, jogos, eventos, jogadores: J.map(({ _eq, _g, ...p }) => p), plantel, tecnicos, marcadores, noticias, mercado, equipa_jornada, definicoes, newsletter: [], mensagens: [] };
 })();
