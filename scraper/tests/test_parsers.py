@@ -92,3 +92,31 @@ def test_all():
 
 if __name__ == "__main__":
     test_all()
+
+def test_tipos():
+    from scrape import classificar as c
+    casos = {"Golo": "golo", "Golo Penalti": "golo_penalti", "Golo Livre Direto": "golo_livre", "Penalti Falhado": "penalti_falhado",
+             "Livre Direto Falhado": "livre_falhado", "Cartão Azul 4:17": "azul", "Cartão Amarelo 10:48": "amarelo", "Cartão Vermelho": "vermelho",
+             "Desconto de Tempo (4:17)": "desconto", "Falta 3 (0:23)": "falta", "Auto Golo": "autogolo", "Penalti Defendido": "defesa"}
+    for k, v in casos.items():
+        assert c(k.lower()) == v, (k, c(k.lower()))
+    tl = """<h3>1ª Parte</h3><div class='time d-flex align-items-center justify-content-end time-team2'> <div class='me-3 text-end'> <p><strong>Livre Direto Falhado</strong></p> <p>12:32 Joel Martin</p> </div> <img src='https://plataforma.fpp.pt/Files/FED/FED_165001_170000/FED_166158.png'> </div>"""
+    e = parse_timeline(tl)[0]
+    assert (e["tipo"], e["tempo"], e["jogador"], e["lado"], e["jogador_id"]) == ("livre_falhado", "12:32", "Joel Martin", "fora", 166158), e
+    print("TIPOS OK")
+
+
+def test_dedupe():
+    import scrape, json
+    enviados = []
+    class R: status_code = 201; text = ""
+    scrape.requests.post = lambda url, headers, data, timeout: (enviados.append(json.loads(data)), R())[1]
+    db = scrape.DB("https://x.supabase.co/rest/v1/", "sb_secret_x")
+    assert db.url == "https://x.supabase.co/rest/v1" and "Authorization" not in db.h
+    db.upsert("clubes", [{"id": 1, "nome": "A", "logo_url": None}, {"id": 1, "nome": "A B", "logo_url": "l.png"}, {"id": 2, "nome": "C", "logo_url": None}], "id")
+    assert enviados[0] == [{"id": 1, "nome": "A B", "logo_url": "l.png"}, {"id": 2, "nome": "C", "logo_url": None}], enviados
+    print("DEDUPE OK")
+
+if __name__ == "__main__":
+    test_tipos()
+    test_dedupe()

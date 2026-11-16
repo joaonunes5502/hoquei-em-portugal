@@ -247,18 +247,12 @@ def parse_timeline(h):
             blocos.append([None, []])
         t = txt(el)
         low = t.lower()
-        if "golo" in low: tipo = "golo"
-        elif "azul" in low: tipo = "azul"
-        elif "amarelo" in low: tipo = "amarelo"
-        elif "vermelho" in low: tipo = "vermelho"
-        elif "desconto" in low: tipo = "desconto"
-        elif "falta" in low: tipo = "falta"
-        else: tipo = "outro"
+        tipo = classificar(low)
         tm = RE_TEMPO.search(t)
         img = el.find("img")
         fm = RE_FED.search(img["src"]) if img and img.get("src") else None
         jogador = None
-        if tipo in ("golo", "azul", "amarelo", "vermelho"):
+        if tipo in COM_JOGADOR:
             ps = el.find_all("p")
             if ps:
                 jogador = RE_TEMPO.sub("", txt(ps[-1])).strip() or None
@@ -272,6 +266,29 @@ def parse_timeline(h):
     for i, e in enumerate(eventos):
         e["ordem"] = i
     return eventos
+
+
+COM_JOGADOR = ("golo", "golo_penalti", "golo_livre", "autogolo", "penalti_falhado", "livre_falhado", "defesa",
+               "azul", "amarelo", "vermelho")
+
+
+def classificar(low):
+    """Texto de um acontecimento do hp.fpp.pt -> tipo."""
+    if "defend" in low or "defesa" in low:
+        return "defesa"
+    if "falhad" in low:
+        return "penalti_falhado" if ("penalti" in low or "penálti" in low) else "livre_falhado"
+    if "golo" in low:
+        if "auto" in low: return "autogolo"
+        if "penalti" in low or "penálti" in low: return "golo_penalti"
+        if "livre" in low: return "golo_livre"
+        return "golo"
+    if "azul" in low: return "azul"
+    if "amarelo" in low: return "amarelo"
+    if "vermelho" in low: return "vermelho"
+    if "desconto" in low: return "desconto"
+    if "falta" in low: return "falta"
+    return "outro"
 
 
 def parse_estatisticas(h):
