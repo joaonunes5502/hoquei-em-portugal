@@ -493,7 +493,7 @@ tr[data-z] td:first-child{box-shadow:inset 4px 0 var(--zc)}
 /* destaque da página inicial: foto ao lado (PC) e foto de fundo (telemóvel/tablet) */
 .hero-grid{align-items:stretch}
 .hero-grid > div:first-child{display:flex;flex-direction:column;justify-content:center}
-.hero .ph{aspect-ratio:auto;min-height:420px;border-radius:28px;overflow:hidden;display:block}
+.hero .ph{aspect-ratio:auto;min-height:420px;border-radius:0 64px 0 64px;overflow:hidden;display:block}
 .hero .ph .imgbox{position:absolute;inset:0;border-radius:0}
 .hero .ph .num{left:auto;right:14px;bottom:14px;top:auto;background:rgba(18,18,18,.55);color:#F2EEE6;padding:5px 10px;border-radius:999px;font-size:11px;z-index:2;backdrop-filter:blur(4px)}
 @media(max-width:1000px){
