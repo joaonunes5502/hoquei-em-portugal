@@ -272,6 +272,17 @@ class Navegador:
         self.b = self._pw.chromium.launch()
         self.p = self.b.new_page(locale="en-GB", viewport={"width": 1366, "height": 900})
         self.p.set_default_timeout(30000)
+        self.rede = []   # respostas dos servidores de dados do site (para perceber falhas)
+        self.p.on("response", lambda r: self.rede.append(f"{r.status} {r.url.split('?')[0][-45:]}") if any(k in r.url for k in ("sg_token", "api.sidgad")) else None)
+        self.p.on("requestfailed", lambda r: self.rede.append(f"FALHOU {r.url.split('?')[0][-45:]} ({r.failure})") if "sidgad" in r.url else None)
+        self.p.on("pageerror", lambda e: self.rede.append(f"ERRO-JS {str(e)[:80]}"))
+
+    def diagnostico(self):
+        try:
+            texto = re.sub(r"\s+", " ", self.p.inner_text("body"))[:220]
+        except Exception:
+            texto = "?"
+        return f"endereço: {self.p.url} | rede: {'; '.join(self.rede[-8:]) or 'nenhum pedido de dados'} | no ecrã: {texto}"
 
     def fechar(self):
         self.b.close()
@@ -280,7 +291,10 @@ class Navegador:
     def ligas(self):
         """{id no nosso site: id da liga no site da WSE}, pelos cartões da época atual na página inicial."""
         self.p.goto(SITE + "/", wait_until="domcontentloaded")
-        self.p.wait_for_selector("button.sidgad-liga-card", state="attached")
+        try:
+            self.p.wait_for_selector("button.sidgad-liga-card", state="attached", timeout=45000)
+        except Exception:
+            raise RuntimeError("o site da WSE abriu mas não mostrou as competições. " + self.diagnostico())
         self.p.wait_for_timeout(1500)
         cartoes = self.p.eval_on_selector_all(
             "button.sidgad-liga-card:not(.sidgad-oculto)",
@@ -442,11 +456,16 @@ class Europa:
                                   "ficha": {**f["ficha"], "pavilhao": f["pavilhao"]}, "detalhes_em": datetime.now(timezone.utc).isoformat()}], "id")
 
 
+def aviso(texto, nivel="error"):
+    """Mensagem que fica visível no resumo da execução no GitHub (além do registo normal)."""
+    print(f"::{nivel} title=Robô europeu::" + re.sub(r"\s+", " ", str(texto))[:900])
+
+
 def correr(db, nav, so_ver=False):
     ativas = None if so_ver else {c["id"] for c in db.select("competicoes", "select=id&ativa=eq.true&id=gte.900000")}
     ligas = nav.ligas()
     print(f"Competições encontradas no site da WSE: {ligas}")
-    eu, erros, feitas, fichas = (None if so_ver else Europa(db)), 0, 0, 0
+    eu, erros, feitas, fichas, resumo = (None if so_ver else Europa(db)), 0, 0, 0, []
     for indice, (cid, _) in enumerate(COMPETICOES):
         if cid not in ligas or (ativas is not None and cid not in ativas):
             continue
@@ -454,6 +473,7 @@ def correr(db, nav, so_ver=False):
             jogos = ler_calendario(nav.vista(ligas[cid], "calendar", "table.sidgad-calendario-table"))
             tabela = ler_classificacao(nav.vista(ligas[cid], "clasificaciones", "table.sidgad-clasif-tabla"))
             print(f"  {cid}: {len(jogos)} jogos ({sum(1 for j in jogos if j['gc'] is not None)} com resultado), {len(tabela)} equipas na classificação")
+            resumo.append(f"{cid}: {len(jogos)} jogos/{len(tabela)} equipas")
             if so_ver:
                 for j in jogos[:4]:
                     print("     ", j["ronda"], j["data"], j["hora"], j["casa"]["nome"], j["gc"], "-", j["gf"], j["fora"]["nome"])
@@ -469,8 +489,10 @@ def correr(db, nav, so_ver=False):
         except Exception as e:  # uma competição com problemas não pára as outras
             erros += 1
             print(f"  ERRO em {cid}: {type(e).__name__}: {e}")
+            resumo.append(f"{cid}: ERRO {type(e).__name__}: {str(e)[:160]}")
         time.sleep(1)
     print(f"Feito: {feitas} competições, {fichas} fichas de jogo, {erros} erros")
+    aviso(f"{feitas} competições lidas, {fichas} fichas de jogo, {erros} erros. Ligas no site da WSE: {ligas}. " + " · ".join(resumo), "notice" if feitas and not erros else "warning")
     return feitas > 0 or not ligas
 
 
@@ -482,6 +504,9 @@ if __name__ == "__main__":
     nav = Navegador()
     try:
         ok = correr(None if ver else DB(url, key), nav, ver)
+    except Exception as e:
+        aviso(f"{type(e).__name__}: {e}")
+        ok = False
     finally:
         nav.fechar()
     sys.exit(0 if ok else 1)
