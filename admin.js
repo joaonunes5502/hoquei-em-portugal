@@ -164,7 +164,7 @@ S.jogos = async () => {
   const jor = sessionStorage.jj && jors.includes(+sessionStorage.jj) ? +sessionStorage.jj : (Math.max(0, ...js.filter(j => j.golos_casa != null).map(j => j.jornada || 0)) || jors[0]);
   const l = js.filter(j => j.jornada === jor);
   return { html: `<h1>Jogos</h1><p class="hint">Resultados, datas e equipas vêm do hp.fpp.pt. Aqui acrescentas o canal de TV, destaques e notas.</p><div class="filters"><select id="jc">${optComps(c, false)}</select><select id="jj">${jors.map(x => `<option ${x === jor ? "selected" : ""} value="${x}">${esc(js.find(j => j.jornada === x)?.jornada_nome || "Jornada " + x)}</option>`).join("")}</select></div>
-    <table class="tbl"><thead><tr><th>Data</th><th>Jogo</th><th>Canal TV</th><th>Nota</th><th>Destaque</th><th></th></tr></thead><tbody>${l.map(j => `<tr data-id="${j.id}"><td>${esc(j.data || "")} ${esc(j.hora || "")}</td><td><b>${esc(teamName(j.casa_id))} ${j.golos_casa != null ? j.golos_casa + "-" + j.golos_fora : "vs"} ${esc(teamName(j.fora_id))}</b></td><td><input class="in" data-k="canal_tv" value="${esc(j.canal_tv)}" placeholder="ex.: Sport TV 2" list="canais"></td><td><input class="in" data-k="nota" value="${esc(j.nota)}"></td><td><input type="checkbox" data-k="destaque" ${j.destaque ? "checked" : ""}></td><td><button class="btn sm">Guardar</button></td></tr>`).join("") || `<tr><td colspan="6">Sem jogos (o robô ainda não correu?).</td></tr>`}</tbody></table>
+    <table class="tbl"><thead><tr><th>Data</th><th>Jogo</th><th>Canal TV</th><th>Nota</th><th>Destaque</th><th></th></tr></thead><tbody>${l.map(j => `<tr data-id="${j.id}"><td>${esc(j.data || "")} ${esc(j.hora || "")}</td><td><b>${esc((j.casa_id != null ? teamName(j.casa_id) : (j.casa_nome || "—")))} ${j.golos_casa != null ? j.golos_casa + "-" + j.golos_fora : "vs"} ${esc((j.fora_id != null ? teamName(j.fora_id) : (j.fora_nome || "—")))}</b></td><td><input class="in" data-k="canal_tv" value="${esc(j.canal_tv)}" placeholder="ex.: Sport TV 2" list="canais"></td><td><input class="in" data-k="nota" value="${esc(j.nota)}"></td><td><input type="checkbox" data-k="destaque" ${j.destaque ? "checked" : ""}></td><td><button class="btn sm">Guardar</button></td></tr>`).join("") || `<tr><td colspan="6">Sem jogos (o robô ainda não correu?).</td></tr>`}</tbody></table>
     <datalist id="canais"><option>FPP TV</option><option>Sport TV</option><option>Sport TV 2</option><option>A Bola TV</option><option>Canal 11</option><option>RTP 2</option><option>Porto Canal</option><option>BTV</option><option>Sporting TV</option></datalist>`,
     after: () => { $("#jc").onchange = e => { sessionStorage.jc = e.target.value; delete sessionStorage.jj; route(); }; if ($("#jj")) $("#jj").onchange = e => { sessionStorage.jj = e.target.value; route(); };
       document.querySelectorAll("tr[data-id] button").forEach(b => b.onclick = async () => { const tr = b.closest("tr"); const r = { id: +tr.dataset.id }; tr.querySelectorAll("[data-k]").forEach(i => r[i.dataset.k] = i.type === "checkbox" ? i.checked : (i.value.trim() || null)); await save("jogos", r); }); } };
@@ -329,15 +329,45 @@ S.notificacoes = async () => {
 };
 
 /* --- Competições --- */
-S.competicoes = async () => ({
-  html: `<h1>Competições</h1><p class="hint">O robô descobre as competições sozinho. Desliga “ativa” nas que não queres no site (e o robô deixa de as atualizar). “Menu” escolhe se a competição aparece em destaque no menu e nos botões das competições, ou dentro de “Mais competições”. “Página inicial” é a competição da tabela e da jornada da página inicial. “Parte (min)” é a duração de cada parte (25 nos seniores; muda se uma prova usar partes mais curtas) e serve para calcular o minuto dos golos.</p><table class="tbl"><thead><tr><th>Nome oficial</th><th>Nome no site</th><th>Ordem</th><th>Parte (min)</th><th>Menu</th><th>Ativa</th><th>Página inicial</th><th></th></tr></thead><tbody>${D.comps.map(c => `<tr data-id="${c.id}"><td><b>${esc(c.nome)}</b><br><small>${esc(c.grupo || "")} · id ${c.id}</small></td><td><input class="in" data-k="nome_curto" value="${esc(c.nome_curto)}" placeholder="${esc(c.nome)}"></td><td><input class="in" type="number" data-k="ordem" value="${esc(c.ordem)}" style="width:70px"></td><td><input class="in" type="number" data-k="duracao_parte" value="${esc(c.duracao_parte ?? 25)}" style="width:70px" title="Duração de cada parte, para calcular o minuto dos golos"></td><td><select class="in" data-k="menu" style="min-width:150px"><option value="principal" ${c.menu === "principal" ? "selected" : ""}>Competição principal</option><option value="mais" ${c.menu !== "principal" ? "selected" : ""}>Mais competições</option></select></td><td><input type="checkbox" data-k="ativa" ${c.ativa ? "checked" : ""}></td><td><input type="radio" name="pr" data-k="principal" ${c.principal ? "checked" : ""}></td><td><button class="btn sm">Guardar</button></td></tr>`).join("") || `<tr><td colspan="6">Sem competições (corre o robô em modo “completo”).</td></tr>`}</tbody></table>`,
-  after: () => document.querySelectorAll("tr[data-id] button").forEach(b => b.onclick = async () => {
-    const tr = b.closest("tr"), id = +tr.dataset.id, r = { id };
-    tr.querySelectorAll("[data-k]").forEach(i => r[i.dataset.k] = i.type === "checkbox" || i.type === "radio" ? i.checked : i.type === "number" ? (+i.value || (i.dataset.k === "duracao_parte" ? 25 : 100)) : (i.value.trim() || null));
-    if (r.principal) for (const c of D.comps.filter(c => c.principal && c.id !== id)) { await sb.from("competicoes").update({ principal: false }).eq("id", c.id); c.principal = false; }
-    if (await save("competicoes", r)) Object.assign(D.comps.find(c => c.id === id), r);
-  })
-});
+const provaKey = c => "g" + (c.grupo_id ?? c.grupo ?? "c" + c.id);
+const provaAuto = t => String(t || "").replace(/\s+de\s+Hóquei em Patins/i, "").replace(/^Campeonato Nacional\s+/i, "").replace(/^Seniores\s+/i, "").replace(/\bPLACARD\b/g, "").trim().replace(/^Femininos?$/i, "Feminino").replace(/^Sub\s*(\d+)$/i, "Sub-$1").replace(/^Super\s*Taça$/i, "Supertaça");
+S.competicoes = async () => {
+  const grupos = new Map();
+  D.comps.forEach(c => { const k = provaKey(c); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); });
+  const linhaComp = c => `<tr data-id="${c.id}"><td><b>${esc(c.nome)}</b><br><small>id ${c.id}</small></td>
+    <td><input class="in" data-k="zona" value="${esc(c.zona || "")}" placeholder="automático" title="Nome do separador dentro da prova (ex.: Norte, Sul A, Feminina)"></td>
+    <td><input class="in" data-k="nome_curto" value="${esc(c.nome_curto)}" placeholder="${esc(c.nome)}"></td>
+    <td><select class="in" data-k="formato"><option value="auto" ${!c.formato || c.formato === "auto" ? "selected" : ""}>Automático</option><option value="liga" ${c.formato === "liga" ? "selected" : ""}>Classificação</option><option value="eliminatoria" ${c.formato === "eliminatoria" ? "selected" : ""}>Quadro (taça)</option></select></td>
+    <td><input class="in" type="number" data-k="ordem" value="${esc(c.ordem)}" style="width:64px"></td>
+    <td><input class="in" type="number" data-k="duracao_parte" value="${esc(c.duracao_parte ?? 25)}" style="width:64px" title="Duração de cada parte, para calcular o minuto dos golos"></td>
+    <td><input type="checkbox" data-k="ativa" ${c.ativa ? "checked" : ""}></td><td><input type="radio" name="pr" data-k="principal" ${c.principal ? "checked" : ""}></td><td><button class="btn sm">Guardar</button></td></tr>`;
+  return {
+    html: `<h1>Competições</h1><p class="hint">As competições estão agrupadas por <b>prova</b>, como no hp.fpp.pt (ex.: a <b>2ª Divisão</b> tem os separadores <b>Norte</b> e <b>Sul</b>). No site, o menu mostra só as provas; dentro de cada uma aparecem os separadores.<br>
+      <b>Prova</b>: o nome no menu e o sítio onde aparece (“Competição principal” = em destaque; “Mais competições” = na lista). <b>Separador</b>: o nome dentro da prova (vazio = automático). <b>Formato</b>: “Automático” mostra um quadro (bracket) nas taças, supertaças, Elite Cup e play-offs, e a classificação nas restantes; muda só se o automático errar.<br>
+      Desliga “ativa” nas que não queres no site (o robô deixa de as atualizar). “Página inicial” é a competição da tabela da página inicial. “Parte” é a duração de cada parte em minutos (serve para o minuto dos golos).</p>
+    <div style="overflow-x:auto"><table class="tbl provas"><thead><tr><th>Competição oficial</th><th>Separador</th><th>Nome curto</th><th>Formato</th><th>Ordem</th><th>Parte</th><th>Ativa</th><th>Página inicial</th><th></th></tr></thead><tbody>
+    ${[...grupos.entries()].map(([k, cs]) => { const nomeP = cs.map(c => c.grupo_curto).find(Boolean) || "", menu = cs.some(c => c.menu === "principal") ? "principal" : "mais";
+      return `<tr class="prova" data-g="${esc(k)}"><td colspan="9"><div class="pv"><span class="lbl">Prova</span><input class="in" data-gk="grupo_curto" value="${esc(nomeP)}" placeholder="${esc(provaAuto(cs[0].grupo || cs[0].nome))}"><select class="in" data-gk="menu"><option value="principal" ${menu === "principal" ? "selected" : ""}>Competição principal</option><option value="mais" ${menu !== "principal" ? "selected" : ""}>Mais competições</option></select><button class="btn sm" data-prova>Guardar prova</button><small>${esc(cs[0].grupo || "")}</small></div></td></tr>${cs.map(linhaComp).join("")}`; }).join("") || `<tr><td colspan="9">Sem competições (corre o robô em modo “completo”).</td></tr>`}
+    </tbody></table></div>`,
+    after: () => {
+      document.querySelectorAll("tr[data-id] button").forEach(b => b.onclick = async () => {
+        const tr = b.closest("tr"), id = +tr.dataset.id, r = { id };
+        tr.querySelectorAll("[data-k]").forEach(i => r[i.dataset.k] = i.type === "checkbox" || i.type === "radio" ? i.checked : i.type === "number" ? (+i.value || (i.dataset.k === "duracao_parte" ? 25 : 100)) : (i.value.trim() || null));
+        if (!r.formato) r.formato = "auto";
+        if (r.principal) for (const c of D.comps.filter(c => c.principal && c.id !== id)) { await sb.from("competicoes").update({ principal: false }).eq("id", c.id); c.principal = false; }
+        if (await save("competicoes", r)) Object.assign(D.comps.find(c => c.id === id), r);
+      });
+      document.querySelectorAll("[data-prova]").forEach(b => b.onclick = async () => {
+        const tr = b.closest("tr"), cs = grupos.get(tr.dataset.g), r = {};
+        tr.querySelectorAll("[data-gk]").forEach(i => r[i.dataset.gk] = i.value.trim() || null);
+        r.menu = r.menu || "mais";
+        const { error } = await sb.from("competicoes").update(r).in("id", cs.map(c => c.id));
+        if (error) return toast("Erro: " + error.message, 1);
+        cs.forEach(c => Object.assign(c, r)); toast("Prova guardada ✓");
+      });
+    }
+  };
+};
 
 /* --- Zonas das tabelas (play-offs, subidas e descidas) --- */
 const ZONAS = { campeao: ["Play-off de apuramento de campeão", "#C9A227"], playoff: ["Play-off", "#2F6FB5"], subida: ["Sobe de divisão", "#1E8E5A"], playoff_subida: ["Play-off de subida", "#62B88E"], playoff_descida: ["Play-off de descida", "#E08A2E"], descida: ["Desce de divisão", "#C0392B"] };

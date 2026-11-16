@@ -16,9 +16,12 @@ window.HP_DEMO = (function () {
   equipas.push({ id: 1203, competicao_id: 494, clube_id: 123, nome: 'J. Pacense "B"' }, { id: 1300, competicao_id: 511, clube_id: 123, nome: "J. Pacense" });
   const competicoes = [
     { id: 493, nome: "Campeonato Placard HP - Fase Regular", grupo: "Campeonato Placard de Hóquei em Patins", nome_curto: "Campeonato Placard", ativa: true, principal: true, ordem: 1, menu: "principal", zonas: [{ tipo: "campeao", de: 1, ate: 8, nome: "Play-off do título" }, { tipo: "descida", de: 13, ate: 14 }] },
-    { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
+    { id: 494, nome: "CN 2ª Divisão Norte", grupo: "Campeonato Nacional 2ª Divisão", grupo_id: 4, nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
+    { id: 495, nome: "CN 2ª Divisão Sul", grupo: "Campeonato Nacional 2ª Divisão", grupo_id: 4, nome_curto: null, ativa: true, principal: false, ordem: 2, menu: "principal" },
+    { id: 509, nome: "Elite Cup Masculina", grupo: "Elite Cup", grupo_id: 15, nome_curto: null, ativa: true, principal: false, ordem: 5, menu: "principal" },
+    { id: 510, nome: "Elite Cup Feminina", grupo: "Elite Cup", grupo_id: 15, nome_curto: null, ativa: true, principal: false, ordem: 5, menu: "principal" },
     { id: 511, nome: "CN Sub 23 Norte", grupo: "Campeonato Nacional Sub 23", nome_curto: null, ativa: true, principal: false, ordem: 4, menu: "mais" },
-    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "mais" }
+    { id: 508, nome: "Taça de Portugal Masculina - Pré Eliminatória", grupo: "Taça de Portugal Masculina", grupo_id: 20, nome_curto: "Taça de Portugal", ativa: true, principal: false, ordem: 3, menu: "principal" }
   ];
   // jornadas 1 e 2 reais; o resto é calendário de exemplo
   const R = [
@@ -38,10 +41,23 @@ window.HP_DEMO = (function () {
     golos_casa: gc, golos_fora: gf, estado: gc == null ? "agendado" : "final", tv_url: "https://tv.fpp.pt/", arbitros: id === 18727 ? "Carlos Correia, Silvia Coelho, Hélder Pereira, Alexandre Pinto" : null,
     faltas_casa: id === 18727 ? 5 : null, faltas_fora: id === 18727 ? 3 : null, canal_tv: canais[id] || null, destaque: false, nota: null
   }));
+  // taças (quadro): Elite Cup masculina (real) e pré-eliminatória da Taça de Portugal (só nomes, como no hp.fpp.pt)
+  const TJ = (id, comp, ronda, jor, num, data, hora, casa, fora, gc, gf, cn, fn) => ({ id, competicao_id: comp, jornada: jor, jornada_nome: ronda, numero: num, data, hora, casa_id: casa, fora_id: fora, casa_nome: cn || null, fora_nome: fn || null,
+    golos_casa: gc, golos_fora: gf, estado: gc == null ? "agendado" : "final", tv_url: null, arbitros: null, faltas_casa: null, faltas_fora: null, canal_tv: null, destaque: false, nota: null });
+  jogos.push(
+    TJ(1000100885, 509, "1/4 Final", 1, 1557, "2026-10-29", "19:00", 1181, 1167, 6, 1), TJ(1000100886, 509, "1/4 Final", 1, 1558, "2026-10-29", "22:00", 1159, 1178, 3, 5),
+    TJ(1000100887, 509, "1/4 Final", 1, 1559, "2026-10-30", "19:00", 1172, 1186, 7, 3), TJ(1000100888, 509, "1/4 Final", 1, 1560, "2026-10-30", "22:00", 1185, 1190, 2, 1),
+    TJ(1000100889, 509, "1/2 Final", 2, 1561, "2026-10-31", "18:00", 1181, 1185, 1, 2), TJ(1000100890, 509, "1/2 Final", 2, 1562, "2026-10-31", "21:30", 1178, 1172, 2, 4),
+    TJ(1000100891, 509, "Final", 3, 1563, "2026-11-01", "20:00", 1185, 1172, 2, 5),
+    TJ(-50801543, 508, "Pré Eliminatória Norte", 1, 1543, "2026-11-29", "17:30", null, null, null, null, "CA Feira", "CENAP"),
+    TJ(-50801544, 508, "Pré Eliminatória Norte", 1, 1544, "2026-11-29", "17:00", null, null, null, null, "HC Paço de Rei", "VizelaSkating"),
+    TJ(-50801545, 508, "Pré Eliminatória Norte", 1, 1545, "2026-11-29", "18:30", null, null, null, null, "CAR Taipense", "Escola Livre A"),
+    TJ(-50801550, 508, "Pré Eliminatória Sul", 2, 1550, "2026-11-28", "17:30", null, null, null, null, "ACR Santa Cita", "GD Estreito"),
+    TJ(-50801551, 508, "Pré Eliminatória Sul", 2, 1551, "2026-11-28", "18:00", null, null, null, null, "OH Sports", "CD Boliqueime"));
   // classificação calculada a partir dos jogos
   const t = {};
   equipas.forEach(e => t[e.id] = { competicao_id: 493, equipa_id: e.id, pts: 0, j: 0, v: 0, e: 0, d: 0, gm: 0, gs: 0 });
-  jogos.filter(j => j.golos_casa != null).forEach(j => {
+  jogos.filter(j => j.golos_casa != null && j.competicao_id === 493).forEach(j => {
     const a = t[j.casa_id], b = t[j.fora_id]; a.j++; b.j++; a.gm += j.golos_casa; a.gs += j.golos_fora; b.gm += j.golos_fora; b.gs += j.golos_casa;
     if (j.golos_casa > j.golos_fora) { a.v++; b.d++; a.pts += 3 } else if (j.golos_casa < j.golos_fora) { b.v++; a.d++; b.pts += 3 } else { a.e++; b.e++; a.pts++; b.pts++ }
   });

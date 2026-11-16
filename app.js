@@ -42,8 +42,19 @@ async function q(table, o = {}) {
     for (const [k, asc] of (o.order || []).slice().reverse()) rows.sort((a, b) => (a[k] ?? "￿") > (b[k] ?? "￿") ? (asc ? 1 : -1) : (a[k] ?? "￿") < (b[k] ?? "￿") ? (asc ? -1 : 1) : 0);
     if (o.limit) rows = rows.slice(0, o.limit);
   }
+  if (table === "jogos") rows.forEach(equipasPorNome);
   cache.set(key, rows);
   return rows;
+}
+// taças: quando a FPP só dá o nome da equipa, cria uma equipa "de passagem" para o site a conseguir mostrar
+function equipasPorNome(j) {
+  for (const l of ["casa", "fora"]) {
+    if (j[l + "_id"] != null || !j[l + "_nome"]) continue;
+    let h = 0; for (const ch of j[l + "_nome"]) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    const id = -(Math.abs(h) % 1e9) - 1;
+    if (!B.equipas.has(id)) B.equipas.set(id, { id, nome: j[l + "_nome"], competicao_id: j.competicao_id, clube_id: null, passagem: true });
+    j[l + "_id"] = id;
+  }
 }
 async function ins(table, row) {
   if (!LIVE) return { error: null };
@@ -64,12 +75,41 @@ async function loadBase() {
 }
 const principal = () => B.comps.find(c => c.principal) || B.comps[0];
 const compById = id => B.comps.find(c => c.id === id);
-// competições do menu principal vs "mais competições" (definido no backoffice; se nada estiver definido, as 6 primeiras)
-const compsPrincipais = () => { const p = B.comps.filter(c => c.menu === "principal"); return p.length ? p : B.comps.slice(0, 6); };
-const compsMais = () => { const p = compsPrincipais(); return B.comps.filter(c => !p.includes(c)); };
+/* ---- provas: as competições do mesmo grupo da FPP ficam juntas (2ª Divisão > Norte | Sul) ---- */
+const provaId = c => "g" + (c.grupo_id ?? c.grupo ?? "c" + c.id);
+const FASES = /\s*[-–·]?\s*(pr[eé][\s-]*eliminat[óo]ria|\d+[ªa]?\s*eliminat[óo]ria|eliminat[óo]rias?|1\/(2|4|8|16|32)\s*(de\s*)?final|oitavos( de final)?|quartos( de final)?|meias?[\s-]*finais?|final four|fase final|final)\b.*$/i;
+const ehTaca = cs => { const f = cs.map(c => c.formato).find(f => f && f !== "auto"); if (f) return f === "eliminatoria"; return cs.some(c => /ta[çc]a|cup|supertaça|super taça|final four|play[\s-]?off|eliminat/i.test(c.nome + " " + (c.grupo || ""))); };
+function provaNomeAuto(t) {
+  t = String(t || "").replace(/\s+de\s+Hóquei em Patins/i, "").replace(/^Campeonato Nacional\s+/i, "").replace(/^Seniores\s+/i, "").replace(/\bPLACARD\b/g, "").trim();
+  return t.replace(/^Femininos?$/i, "Feminino").replace(/^Sub\s*(\d+)$/i, "Sub-$1").replace(/^Super\s*Taça$/i, "Supertaça") || "Competição";
+}
+// separadores dentro da prova: um por competição; nas taças, as fases (pré-eliminatória, 1/4...) juntam-se num só quadro
+function separadores(comps) {
+  const taca = ehTaca(comps), m = new Map();
+  comps.forEach(c => { const k = taca ? norm(c.nome.replace(FASES, "")).replace(/[^a-z0-9]/g, "") : "c" + c.id; if (!m.has(k)) m.set(k, { id: c.id, comps: [], nome: taca ? c.nome.replace(FASES, "").trim() : c.nome }); m.get(k).comps.push(c); });
+  const seps = [...m.values()];
+  // nome curto: tira as palavras comuns a todos (CN 2ª Divisão Norte / Sul -> Norte / Sul)
+  const pal = seps.map(x => x.nome.replace(/\bPLACARD\b/g, "").trim().split(/\s+/));
+  let ini = 0, fim = 0;
+  if (pal.length > 1) { while (pal.every(w => w[ini] && norm(w[ini]) === norm(pal[0][ini])) && ini < Math.min(...pal.map(w => w.length)) - 1) ini++; while (pal.every(w => w.length - fim - 1 > ini && norm(w[w.length - 1 - fim]) === norm(pal[0][pal[0].length - 1 - fim]))) fim++; }
+  const generos = seps.map(x => /femin/i.test(x.nome));
+  seps.forEach((x, i) => { const manual = x.comps.map(c => c.zona).find(Boolean); x.label = manual || (pal.length > 1 ? (generos.some(Boolean) && !generos.every(Boolean) ? (generos[i] ? "Feminina" : "Masculina") : pal[i].slice(ini, pal[i].length - fim).join(" ")) : ""); });
+  return seps;
+}
+function provas() {
+  const m = new Map();
+  for (const c of B.comps) { const k = provaId(c); if (!m.has(k)) m.set(k, { k, comps: [] }); m.get(k).comps.push(c); }
+  return [...m.values()].map(p => { const c0 = p.comps[0]; return { ...p, rep: p.comps.find(c => c.principal) || c0, nome: p.comps.map(c => c.grupo_curto).find(Boolean) || (p.comps.length === 1 && c0.nome_curto) || provaNomeAuto(c0.grupo || c0.nome), menu: p.comps.some(c => c.menu === "principal") ? "principal" : "mais", taca: ehTaca(p.comps) }; });
+}
+const cardSub = c => { const p = provaDe(c); if (!p) return ""; const l = separadores(p.comps).map(x => x.label).filter(Boolean); return l.length ? l.join(" · ") : (p.taca ? "Taça · eliminatórias" : "Fase regular"); };
+const provaDe = c => c ? provas().find(p => p.k === provaId(c)) : null;
+const pn = c => provaDe(c)?.nome || cn(c);
+// provas do menu principal vs "mais competições" (definido no backoffice; se nada estiver definido, as 6 primeiras)
+const compsPrincipais = () => { const ps = provas(), p = ps.filter(x => x.menu === "principal"); return (p.length ? p : ps.slice(0, 6)).map(x => x.rep); };
+const compsMais = () => { const p = new Set(compsPrincipais().map(provaId)); return provas().filter(x => !p.has(x.k)).map(x => x.rep); };
 function compPicker(c, tab) {
-  const mais = compsMais();
-  return `<div class="cpick"><div class="chips cp-chips">${compsPrincipais().map(x => `<a class="chip ${x.id === c.id ? "on" : ""}" href="#/competicao/${x.id}/${tab}">${esc(cn(x))}</a>`).join("")}</div>${mais.length ? `<select class="input cp-sel" onchange="if(this.value)go('/competicao/'+this.value+'/${tab}')"><option value="">Mais competições ▾</option>${mais.map(x => `<option value="${x.id}" ${x.id === c.id ? "selected" : ""}>${esc(cn(x))}</option>`).join("")}</select>` : ""}</div>`;
+  const mais = compsMais(), k = provaId(c);
+  return `<div class="cpick"><div class="chips cp-chips">${compsPrincipais().map(x => `<a class="chip ${provaId(x) === k ? "on" : ""}" href="#/competicao/${x.id}">${esc(pn(x))}</a>`).join("")}</div>${mais.length ? `<select class="input cp-sel" onchange="if(this.value)go('/competicao/'+this.value)"><option value="">Mais competições ▾</option>${mais.map(x => `<option value="${x.id}" ${provaId(x) === k ? "selected" : ""}>${esc(pn(x))}</option>`).join("")}</select>` : ""}</div>`;
 }
 const cn = c => c ? (c.nome_curto || c.nome) : "";
 const clean = n => String(n || "").split(/\s*\/\s*/)[0].trim().replace(/\s+SAD$/i, "").replace(/\s*["“”']([A-D])["“”']\s*$/, " $1").trim();
@@ -79,7 +119,7 @@ const sufixo = n => (clean(n).match(/\s([B-D])$/) || [])[1];
 const escalao = c => { const n = norm((c?.nome || "") + " " + (c?.grupo || "")); if (/femin/.test(n)) return "F"; const s = /sub\s*-?\s*(\d+)/.exec(n); return s ? "S" + s[1] : ""; };
 const ESC_NOME = { F: "Feminino" };
 const escNome = k => ESC_NOME[k] || (k ? "Sub-" + k.slice(1) : "");
-const teamKey = eid => { const e = B.equipas.get(eid); if (!e) return ""; if (!e.clube_id) return "e" + e.id; const s = sufixo(e.nome), x = escalao(compById(e.competicao_id)); return e.clube_id + (s ? "-" + s : "") + (x ? "-" + x : ""); };
+const teamKey = eid => { const e = B.equipas.get(eid); if (!e || e.passagem) return ""; if (!e.clube_id) return "e" + e.id; const s = sufixo(e.nome), x = escalao(compById(e.competicao_id)); return e.clube_id + (s ? "-" + s : "") + (x ? "-" + x : ""); };
 const teamLabel = eid => { const e = B.equipas.get(eid); const x = escalao(compById(e?.competicao_id)); return tName(eid) + (x ? " · " + escNome(x) : ""); };
 const eqsDaChave = k => { const m = /^e(\d+)$/.exec(k); if (m) return [...B.equipas.values()].filter(e => e.id === +m[1]); return [...B.equipas.values()].filter(e => teamKey(e.id) === k); };
 const clubOfTeam = eid => B.clubes.get(B.equipas.get(eid)?.clube_id);
@@ -134,11 +174,11 @@ const ultimaJornada = jogos => { const js = jogos.filter(j => j.golos_casa != nu
 /* ---------------- menu, placar, pesquisa ---------------- */
 function buildMenu() {
   const sm = (t, l) => `<h5>${t}</h5><div class="sm">${l.map(a => `<a href="${a[1]}" ${/^http/.test(a[1]) ? 'target="_blank"' : ""}>${esc(a[0])}</a>`).join("")}</div>`;
-  $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(cn(c))}</a>`).join("")}</div>
-  <div>${sm("Mais competições", compsMais().map(c => [cn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
+  $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(pn(c))}</a>`).join("")}</div>
+  <div>${sm("Mais competições", compsMais().map(c => [pn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
   <div>${sm("A tua app", [["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
-  $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(cn(c))}</a>`).join("");
+  $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(pn(c))}</a>`).join("");
 }
 function openMenu() { $("#menu").classList.add("open"); document.body.style.overflow = "hidden"; setTimeout(() => $("#q").focus(), 50); }
 function closeMenu() { $("#menu").classList.remove("open"); document.body.style.overflow = ""; }
@@ -194,7 +234,7 @@ async function pHome() {
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="grid-template-columns:${ej.length ? "1.4fr 1fr" : "1fr"};gap:56px">
     ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}${sponsor("equipa_jornada")}</div>` : ""}
     <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span><b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
-  s += `<section style="padding-top:20px"><div class="wrap">${sh("06", "Competições")}<div class="compcards">${[...compsPrincipais(), ...compsMais()].map(x => `<a class="cc rink-r" href="#/competicao/${x.id}"><span class="ar">↗</span><span class="lbl">${esc(x.grupo || "")}</span><span class="x">${esc(cn(x))}</span></a>`).join("")}</div></div></section>`;
+  s += `<section style="padding-top:20px"><div class="wrap">${sh("06", "Competições")}<div class="compcards">${[...compsPrincipais(), ...compsMais()].map(x => `<a class="cc rink-r" href="#/competicao/${x.id}"><span class="ar">↗</span><span class="lbl">${esc(cardSub(x))}</span><span class="x">${esc(pn(x))}</span></a>`).join("")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px"><div>${sh("07", "Mercado", ["Todas as mexidas", "#/mercado"])}${mkt.map(trRow).join("") || empty("Sem movimentos registados.")}</div><div>${sh("08", "Onde ver", ["Agenda", "#/onde-ver"])}${tv.map(tvRow).join("") || empty("Sem transmissões anunciadas.")}</div></div></section>`;
   s += `<div class="newsband"><div class="wrap"><div><span class="lbl" style="color:rgba(255,255,255,.7)">Newsletter</span><h2 class="x" style="margin-top:10px">A jornada inteira<br>no teu email.</h2><p style="opacity:.85;margin-top:14px;max-width:460px;font-size:18px">Resultados, tabela, equipa da jornada e as mexidas do mercado, todas as semanas.</p></div><form id="nlf"><input class="input" type="email" name="email" placeholder="o-teu@email.pt" required><button class="btn">Subscrever</button><label><input type="checkbox" required> Aceito receber a newsletter do Hóquei em Português</label></form></div></div>`;
   if (news.length) s += `<section><div class="wrap"><div class="sh"><span class="idx">09</span><h2 class="x">@${esc(CFG.INSTAGRAM || "hoqueiemportugues")}</h2><a class="more" href="https://www.instagram.com/${esc(CFG.INSTAGRAM || "hoqueiemportugues")}/" target="_blank">Seguir no Instagram ↗</a></div><div class="ig">${news.slice(0, 6).map(n => `<a href="https://www.instagram.com/${esc(CFG.INSTAGRAM || "hoqueiemportugues")}/" target="_blank">${img(n.imagem_url)}</a>`).join("")}</div></div></section>`;
@@ -236,6 +276,9 @@ async function pNoticia(slug) {
 async function pComp(id, tab) {
   const c = compById(+id) || principal(); if (!c) return { html: hd([], "Sem competições") };
   tab = +tab || 0;
+  const P = provaDe(c), seps = separadores(P.comps), sep = seps.find(x => x.comps.some(y => y.id === c.id)) || { id: c.id, comps: [c], label: "" };
+  if (ehTaca(sep.comps)) return pTaca(c, P, seps, sep, tab);
+  const zchips = zonaChips(seps, sep, tab);
   const [jogos, cls, mk] = await Promise.all([q("jogos", { eq: { competicao_id: c.id }, order: [["jornada", true], ["data", true], ["hora", true]] }), q("classificacao", { eq: { competicao_id: c.id }, order: [["pos", true]] }), q("marcadores", { eq: { competicao_id: c.id }, order: [["pos", true]], limit: 50 })]);
   const base = `#/competicao/${c.id}`;
   const chips = compPicker(c, tab);
@@ -253,7 +296,60 @@ async function pComp(id, tab) {
   } else {
     body = mk.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th>Clube</th><th class="c">Golos</th></tr></thead><tbody>${mk.map(m => `<tr class="${m.pos <= 3 ? "q" : ""}"><td><span class="pos">${m.pos}</span></td><td style="font-weight:600"><a href="#/jogador/${m.jogador_id}">${esc(m.nome)}</a></td><td><a href="#/clube/${m.clube_id}">${crestC(B.clubes.get(m.clube_id))}${esc(clubName(B.clubes.get(m.clube_id)))}</a></td><td class="c pts">${m.golos}</td></tr>`).join("")}</tbody></table>` : empty("Ainda sem marcadores.");
   }
-  return { html: hd([["Competições"], [cn(c)]], cn(c), (c.grupo && c.grupo !== cn(c) ? c.grupo + " · " : "") + "Época 2026/27", ["Classificação", "Jornadas", "Calendário", "Marcadores"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${chips}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado ${esc(c.atualizado_em ? new Date(c.atualizado_em).toLocaleString("pt-PT") : "")}</p></div></section>`, after };
+  return { html: hd([["Competições"], [P.nome]], P.nome, (sep.label ? sep.label + " · " : "") + "Época 2026/27", ["Classificação", "Jornadas", "Calendário", "Marcadores"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${chips}${zchips}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado ${esc(c.atualizado_em ? new Date(c.atualizado_em).toLocaleString("pt-PT") : "")}</p></div></section>`, after };
+}
+
+const zonaChips = (seps, sep, tab) => seps.length > 1 ? `<div class="zchips" role="tablist">${seps.map(x => `<a class="zchip ${x === sep ? "on" : ""}" href="#/competicao/${x.id}/${tab}">${esc(x.label || x.nome)}</a>`).join("")}</div>` : "";
+
+/* ---------------- taças: quadro (bracket) ---------------- */
+const REGIAO = /\s*[-–·]?\s*\b(zona\s+\S+|s[ée]rie\s+\S+|grupo\s+\S+|norte|sul|centro|ilhas|a[çc]ores|madeira)\b.*$/i;
+function rondaTam(nome) { // n.º de jogos de uma ronda pelo nome (null = não se sabe, ex.: pré-eliminatória)
+  const t = norm(nome || "");
+  const f = /1\/(\d+)/.exec(t); if (f) return +f[1];
+  if (/oitavos/.test(t)) return 8; if (/quartos/.test(t)) return 4; if (/meia/.test(t)) return 2; if (/final four/.test(t)) return null;
+  if (/^\s*final\s*$|grande final/.test(t)) return 1; return null;
+}
+const RONDA_NOME = { 16: "1/16 de Final", 8: "Oitavos de Final", 4: "Quartos de Final", 2: "Meias-Finais", 1: "Final" };
+function quadro(jogos, comps) {
+  const ordemComp = new Map(comps.map((c, i) => [c.id, i]));
+  const rondas = new Map();
+  jogos.slice().sort((a, b) => (ordemComp.get(a.competicao_id) - ordemComp.get(b.competicao_id)) || (a.jornada ?? 0) - (b.jornada ?? 0) || (a.numero ?? 0) - (b.numero ?? 0)).forEach(j => {
+    const nome = (j.jornada_nome || "Ronda").replace(REGIAO, "").trim() || j.jornada_nome, k = norm(nome).replace(/[^a-z0-9\/]/g, "");
+    if (!rondas.has(k)) rondas.set(k, { nome, tam: rondaTam(nome), jogos: [] });
+    rondas.get(k).jogos.push(j);
+  });
+  const lista = [...rondas.values()];
+  // rondas que ainda não existem: completa até à final
+  let ult = [...lista].reverse().find(r => r.tam)?.tam;
+  const fechado = lista.some(r => r.tam === 1);
+  if (!fechado) {
+    let tam = ult ? ult / 2 : 8;
+    if (!ult && lista.length) { const n = lista[lista.length - 1].jogos.length; tam = n >= 16 ? 16 : n >= 8 ? 8 : n >= 4 ? 4 : n >= 2 ? 2 : 1; if (n >= 8) tam = Math.min(tam, 8); }
+    for (; tam >= 1; tam /= 2) lista.push({ nome: RONDA_NOME[tam] || "Ronda", tam, jogos: [], futura: true });
+  }
+  lista.forEach(r => { if (r.tam && r.jogos.length < r.tam) r.vazios = r.tam - r.jogos.length; });
+  const vencedor = j => j.golos_casa == null || j.golos_casa === j.golos_fora ? null : (j.golos_casa > j.golos_fora ? "c" : "f");
+  const lado = (j, l) => { const id = l === "c" ? j.casa_id : j.fora_id, g = l === "c" ? j.golos_casa : j.golos_fora, w = vencedor(j);
+    return `<div class="bt ${w === l ? "w" : w ? "l" : ""}">${crest(id, 20)}<span class="n">${esc(tName(id))}</span><b>${g ?? ""}</b></div>`; };
+  const cartao = j => { const reg = (REGIAO.exec(j.jornada_nome || "") || [""])[0].replace(/^[\s\-–·]+/, "");
+    return `<a class="bm" href="#/jogo/${j.id}"><div class="bi"><span>${esc(fmtD(j.data))}${j.hora ? " · " + esc(j.hora) : ""}</span>${reg ? `<span>${esc(reg)}</span>` : ""}</div>${lado(j, "c")}${lado(j, "f")}</a>`; };
+  const vazio = `<div class="bm vz"><div class="bt"><span class="crest" style="width:20px;height:20px"></span><span class="n">A definir</span></div><div class="bt"><span class="crest" style="width:20px;height:20px"></span><span class="n">A definir</span></div></div>`;
+  return `<div class="bracket-wrap"><div class="bracket">${lista.map((r, i) => `<div class="bcol ${r.futura ? "fut" : ""} ${i === lista.length - 1 ? "last" : ""}"><div class="bh"><span>${esc(r.nome)}</span><small>${r.jogos.length ? r.jogos.length + (r.jogos.length === 1 ? " jogo" : " jogos") : "por sortear"}</small></div><div class="bgames">${r.jogos.map(cartao).join("")}${vazio.repeat(Math.min(r.vazios || 0, 16))}</div></div>`).join("")}</div></div>
+    ${fechado ? "" : `<p class="note">As rondas a tracejado ainda não foram sorteadas: aparecem aqui assim que a FPP publicar os jogos.</p>`}`;
+}
+async function pTaca(c, P, seps, sep, tab) {
+  const ids = sep.comps.map(x => x.id);
+  const jogos = await q("jogos", { in: { competicao_id: ids }, order: [["jornada", true], ["data", true], ["hora", true]] });
+  const base = `#/competicao/${c.id}`;
+  let body;
+  if (tab === 1) {
+    const grupos = new Map();
+    jogos.forEach(j => { const k = (j.competicao_id + "|" + (j.jornada_nome || "")); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(j); });
+    body = [...grupos.values()].map(l => `<h3 class="x" style="font-size:24px;margin:26px 0 12px">${esc(l[0].jornada_nome || "Jogos")}</h3>${l.map(j => matchRow(j)).join("")}`).join("") || empty("Ainda não há jogos publicados.");
+  } else {
+    body = quadro(jogos, sep.comps);
+  }
+  return { html: hd([["Competições"], [P.nome]], P.nome, (sep.label ? sep.label + " · " : "") + "Época 2026/27", ["Quadro", "Jogos"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${compPicker(c, tab)}${zonaChips(seps, sep, tab)}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado automaticamente.</p></div></section>` };
 }
 
 /* ---------------- linha de jogo ---------------- */

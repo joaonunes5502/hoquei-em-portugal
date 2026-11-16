@@ -39,6 +39,8 @@ VIVO_LIMITE = int(os.environ.get("SCRAPER_LIMITE", str(5 * 3600 + 40 * 60)))  # 
 
 RE_EQUIPA = re.compile(r"/Equipa/(\d+)/(\d+)")
 RE_JOGO = re.compile(r"/jogo/(\d+)")
+RE_JOGO_TACA = re.compile(r"/jogoTaca/(\d+)")
+TACA = 1_000_000_000   # os jogos das taças têm outra numeração no hp.fpp.pt (/jogoTaca/N) -> guardados como TACA + N
 RE_CLUBE = re.compile(r"CLUBE_(\d+)\.", re.I)
 RE_FED = re.compile(r"FED_(\d+)\.", re.I)
 RE_TEMPO = re.compile(r"(\d{1,2}:\d{2})")
@@ -85,6 +87,11 @@ def escalao(comp):
         return "F"
     m = re.search(r"sub\s*-?\s*(\d+)", t)
     return "S" + m.group(1) if m else ""
+
+
+def chave_nome(n):
+    """Nome para comparar equipas entre páginas: sem patrocinador, acentos, espaços ou pontuação."""
+    return re.sub(r"[^a-z0-9]", "", _norm(limpar_nome(n)))
 
 
 def chave_equipa(eq, comp):
@@ -161,12 +168,16 @@ def parse_calendar(h, comp_id):
         if len(tds) < 5:
             continue
         a_jogo = tr.find("a", href=RE_JOGO)
+        a_taca = tr.find("a", href=RE_JOGO_TACA)
         links = tr.find_all("a", href=RE_EQUIPA)
         numero = to_int(txt(tds[0]))
-        if len(links) < 2:
+        nomes = [txt(p) for p in tr.select(".coluna-equipa")]
+        if len(links) < 2 and (len(nomes) < 2 or not all(nomes)):
             continue
         if a_jogo:
             jid = int(RE_JOGO.search(a_jogo["href"]).group(1))
+        elif a_taca:
+            jid = TACA + int(RE_JOGO_TACA.search(a_taca["href"]).group(1))
         elif numero:
             # jogo futuro: o hp.fpp.pt ainda não tem ficha -> id provisório (negativo) até a ficha aparecer
             jid = id_provisorio(comp_id, numero)
@@ -177,10 +188,15 @@ def parse_calendar(h, comp_id):
         hm = re.search(r"(\d{1,2}:\d{2})", datahora)
         res = txt(tr.select_one(".resultado"))
         sm = re.match(r"^\s*(\d+)\s*-\s*(\d+)\s*$", res)
-        casa = int(RE_EQUIPA.search(links[0]["href"]).group(2))
-        fora = int(RE_EQUIPA.search(links[1]["href"]).group(2))
-        equipas[casa] = txt(links[0])
-        equipas[fora] = txt(links[1])
+        if len(links) >= 2:
+            casa = int(RE_EQUIPA.search(links[0]["href"]).group(2))
+            fora = int(RE_EQUIPA.search(links[1]["href"]).group(2))
+            equipas[casa] = txt(links[0])
+            equipas[fora] = txt(links[1])
+            nomes = [txt(links[0]), txt(links[1])]
+        else:
+            # taças: o calendário só tem os nomes; o robô descobre as equipas pelo nome (ou pela ficha do jogo)
+            casa = fora = None
         tv = None
         for a in tr.find_all("a", href=True):
             if "tv.fpp.pt" in a["href"]:
@@ -195,6 +211,8 @@ def parse_calendar(h, comp_id):
             "hora": hm.group(1) if hm else None,
             "casa_id": casa,
             "fora_id": fora,
+            "casa_nome": nomes[0],
+            "fora_nome": nomes[1],
             "golos_casa": int(sm.group(1)) if sm else None,
             "golos_fora": int(sm.group(2)) if sm else None,
             "tv_url": tv,
@@ -477,6 +495,8 @@ class Robo:
     def calendario(self, cid):
         jogos, equipas = parse_calendar(self.get(f"/Competicao/{cid}"), cid)
         self.db.upsert("equipas", [{"id": k, "competicao_id": cid, "nome": v} for k, v in equipas.items()], "id")
+        if any(j["casa_id"] is None or j["fora_id"] is None for j in jogos):
+            self.equipas_pelo_nome(cid, jogos)
 
         agora = datetime.now(TZ_PT)
         for j in jogos:
@@ -492,6 +512,33 @@ class Robo:
         self.trocar_provisorios(cid, jogos)
         self.db.upsert("competicoes", [{"id": cid, "atualizado_em": datetime.now(timezone.utc).isoformat()}], "id")
         return jogos
+
+    def indice_equipas(self):
+        """nome normalizado -> [(id, escalão)] de todas as equipas conhecidas (lido 1x por execução)."""
+        if getattr(self, "_indice", None) is None:
+            comps = {c["id"]: c for c in self.db.select("competicoes", "select=id,nome,grupo")}
+            self._indice = {}
+            for e in self.db.select("equipas", "select=id,nome,competicao_id"):
+                c = comps.get(e.get("competicao_id")) or {}
+                self._indice.setdefault(chave_nome(e["nome"]), []).append((e["id"], escalao(c)))
+        return self._indice
+
+    def equipas_pelo_nome(self, cid, jogos):
+        """Taças: o calendário só traz nomes. Usa os ids que a ficha do jogo já deu; senão procura pelo nome
+        (no mesmo escalão: uma taça feminina procura nas equipas femininas)."""
+        comp = (self.db.select("competicoes", f"select=nome,grupo&id=eq.{cid}") or [{}])[0]
+        esc = escalao(comp)
+        antes = {j["id"]: j for j in self.db.select("jogos", f"select=id,casa_id,fora_id&competicao_id=eq.{cid}")}
+        idx = self.indice_equipas()
+        for j in jogos:
+            for lado in ("casa", "fora"):
+                if j[lado + "_id"] is not None:
+                    continue
+                j[lado + "_id"] = (antes.get(j["id"]) or {}).get(lado + "_id")
+                if j[lado + "_id"] is None:
+                    cand = idx.get(chave_nome(j[lado + "_nome"]), [])
+                    certos = [i for i, e in cand if e == esc] or ([i for i, e in cand] if len(cand) == 1 else [])
+                    j[lado + "_id"] = certos[0] if certos else None
 
     def trocar_provisorios(self, cid, jogos):
         """Quando um jogo futuro ganha ficha no hp.fpp.pt, passa o que o backoffice/notificações guardaram
@@ -537,18 +584,26 @@ class Robo:
     def jogo(self, j):
         if j["id"] < 0:
             return  # jogo futuro ainda sem ficha no hp.fpp.pt
-        h = self.get(f"/jogo/{j['id']}")
+        h = self.get(f"/jogoTaca/{j['id'] - TACA}" if j["id"] >= TACA else f"/jogo/{j['id']}")
         info = parse_jogo(h)
         upd = {"id": j["id"], "arbitros": info["arbitros"], "detalhes_em": datetime.now(timezone.utc).isoformat()}
 
+        ids = []
         for eid, clube_id, logo, nome in info["logos"]:
             if clube_id:
                 self.db.upsert("clubes", [{"id": clube_id, "nome": base_clube(nome), "logo_url": logo}], "id")
                 self.db.upsert("equipas", [{"id": eid, "nome": nome, "clube_id": clube_id}], "id")
+                ids.append(eid)
+            else:
+                ids.append(None)
+        casa_id, fora_id = j.get("casa_id"), j.get("fora_id")
+        if len(ids) == 2 and all(ids):
+            casa_id, fora_id = ids          # a ficha diz exatamente que equipas são (importante nas taças)
+            upd["casa_id"], upd["fora_id"] = ids
 
-        for lado, equipa_id in zip(("casa", "fora"), (j["casa_id"], j["fora_id"])):
+        for lado, equipa_id in zip(("casa", "fora"), (casa_id, fora_id)):
             idx = 0 if lado == "casa" else 1
-            if idx >= len(info["equipas"]):
+            if equipa_id is None or idx >= len(info["equipas"]):
                 continue
             eq = info["equipas"][idx]
             self.db.upsert("jogadores", [{"id": p["id"], "nome": p["nome"], "foto_url": p["foto_url"], "numero": p["numero"]} for p in eq["jogadores"]], "id")
@@ -724,7 +779,8 @@ class Robo:
         ids = ",".join(str(j["id"]) for j in jogos)
         feitos = {(n["jogo_id"], n["tipo"]) for n in self.db.select("notificacoes_enviadas", f"select=jogo_id,tipo&jogo_id=in.({ids})")}
         comps = {c["id"]: c for c in self.db.select("competicoes", "select=id,nome,nome_curto,grupo,ativa")}
-        eids = ",".join({str(j["casa_id"]) for j in jogos} | {str(j["fora_id"]) for j in jogos})
+        jogos = [j for j in jogos if j["casa_id"] is not None and j["fora_id"] is not None]
+        eids = ",".join({str(j["casa_id"]) for j in jogos} | {str(j["fora_id"]) for j in jogos}) or "0"
         eqs = {e["id"]: e for e in self.db.select("equipas", f"select=id,nome,clube_id,competicao_id&id=in.({eids})")}
         clubes = {c["id"]: c for c in self.db.select("clubes", "select=id,nome_curto&nome_curto=not.is.null")}
         fila = []
