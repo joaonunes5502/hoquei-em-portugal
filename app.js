@@ -908,10 +908,16 @@ async function passosDaVisita() {
     const js = await q("jogos", { eq: { competicao_id: c.id }, notnull: ["golos_casa"], order: [["data", false], ["hora", false]], limit: 30 });
     jogo = js.find(x => x.detalhes_em) || js[0] || null;
   }
+  // jogo por começar (para mostrar os palpites)
+  let futuro = null;
+  if (recAtivo()) {
+    const fs = await q("jogos", { isnull: ["golos_casa"], gte: { data: new Date().toISOString().slice(0, 10) }, order: [["data", true], ["hora", true]], limit: 60 }).catch(() => []);
+    futuro = fs.find(x => palpiteAberto(x) && (!c || x.competicao_id === c.id)) || fs.find(palpiteAberto) || null;
+  }
   const eq = jogo ? teamKey(jogo.casa_id) : "";
   const movel = matchMedia("(max-width:720px)").matches;
   const P = [];
-  P.push({ ir: "/", titulo: "Bem-vindo ao Hóquei em Português", texto: "Vamos dar uma volta rápida pelo site. É ele que navega: tu só carregas em <b>Seguinte</b>. Podes saltar a qualquer momento." });
+  P.push({ ir: "/", titulo: "Bem-vindo ao Hóquei em Português", texto: "Vamos dar uma volta rápida pelo site. É ele que navega: tu só carregas em <b>Seguinte</b>. Podes saltar a qualquer momento." + (recAtivo() ? " No fim mostramos-te como ganhar pontos e trocá-los por prémios." : "") });
   P.push({ ir: "/", sel: "#board", titulo: "Os jogos do momento", texto: "No topo estão sempre os próximos jogos e os últimos resultados. Toca num deles para abrir o jogo." });
   P.push({ ir: "/", sel: ".hero", titulo: "As notícias em destaque", texto: "As notícias mais importantes passam aqui. Mais abaixo tens as últimas, a classificação, os marcadores e o mercado." });
   if (c) {
@@ -926,13 +932,19 @@ async function passosDaVisita() {
     if (notifAtivas()) P.push({ ir: "/jogo/" + jogo.id, sel: ".seguir-jogo", titulo: "Segue as tuas equipas", texto: "Toca em <b>Seguir</b> e recebes uma notificação quando o jogo começa e outra com o resultado final. Sem conta, sem login." });
   }
   if (eq) P.push({ ir: "/clube/" + eq, sel: ".clubhero", titulo: "A página da equipa", texto: "Cada equipa tem o seu resumo, o <b>plantel</b>, todos os <b>jogos</b> e as mexidas do <b>mercado</b>." + (notifAtivas() ? " O botão Seguir também está aqui." : "") });
+  if (recAtivo()) {
+    if (futuro) P.push({ ir: "/jogo/" + futuro.id, sel: "#palp", titulo: "Faz o teu palpite", texto: `Nos jogos que ainda não começaram, escolhe quem ganha: casa, empate ou fora. Acertas e ganhas <b>${pts(REC("acerto", 10))}</b>; falhas e perdes <b>${REC("erro", 7)}</b>. Podes mudar até à hora do jogo.${REC("direto", 1) > 0 ? ` E cada jogo que abres <b>enquanto está a decorrer</b> dá-te mais <b>${pts(REC("direto", 1))}</b>.` : ""}` });
+    P.push({ ir: "/ranking", sel: "table.rank, .wrap .empty", titulo: "O ranking", texto: "Os melhores palpiteiros do hóquei português. Aparece só o teu nome e os pontos, nunca o email." });
+    P.push({ ir: "/loja", sel: ".loja, .wrap .empty", titulo: "A loja", texto: "Troca os pontos por prémios: bilhetes, merchandising e mais. Depois de resgatares, entramos em contacto contigo." });
+    P.push({ ir: "/", sel: "#contaBtn", titulo: EU ? "A tua conta" : "Cria a tua conta", texto: EU ? "Aqui vês os teus pontos. Toca para veres os palpites, a posição no ranking e os pedidos da loja." : "Para jogar, entra com a tua <b>conta Google</b> neste botão. É grátis, sem palavras-passe, e o resto do site continua a funcionar sem conta." });
+  }
   P.push({ ir: "/", sel: "#themeBtn", titulo: "Modo noite", texto: "Este botão troca entre o modo dia e o modo noite." });
-  P.push({ ir: "/", sel: movel ? "#tabMenu" : "#menuBtn", titulo: "O resto está aqui", texto: `Em <b>${movel ? "Mais" : "Menu"}</b> tens a pesquisa, todas as competições, onde ver os jogos na TV, <b>instalar a app</b> no telemóvel e este guia outra vez, em <b>Como usar</b>.` });
+  P.push({ ir: "/", sel: movel ? "#tabMenu" : "#menuBtn", titulo: "O resto está aqui", texto: `Em <b>${movel ? "Mais" : "Menu"}</b> tens a pesquisa, todas as competições, onde ver os jogos na TV, ${recAtivo() ? "a conta, o ranking e a loja, " : ""}<b>instalar a app</b> no telemóvel e este guia outra vez, em <b>Como usar</b>.` });
   return P;
 }
 let visitaAtiva = false;
 async function tutorial(forcar) {
-  if (!forcar) { try { if (localStorage.getItem("hp-tutorial")) return; } catch (e) { return; } }
+  if (!forcar) { try { if (localStorage.getItem("hp-tutorial-2")) return; } catch (e) { return; } }
   if (visitaAtiva) return;
   visitaAtiva = true;
   closeMenu();
@@ -980,7 +992,7 @@ async function tutorial(forcar) {
   const tecla = e => { if (e.key === "Escape") fechar(); else if (e.key === "ArrowRight" && i < passos.length - 1) { i++; mostrar(); } else if (e.key === "ArrowLeft" && i) { i--; mostrar(); } };
   function fechar() {
     token++; visitaAtiva = false;
-    try { localStorage.setItem("hp-tutorial", "1"); } catch (e) { }
+    try { localStorage.setItem("hp-tutorial-2", "1"); } catch (e) { }
     removeEventListener("scroll", repor, true); removeEventListener("resize", repor); document.removeEventListener("keydown", tecla);
     el.classList.add("sai"); setTimeout(() => el.remove(), 250);
     if (cur !== "/") go(forcar ? origem : "/");
