@@ -598,3 +598,28 @@ html{transition:none}
 .mini-squad.nomes small{font-family:"IBM Plex Mono";font-size:10px;color:var(--ink-2);border:1px solid var(--line);border-radius:4px;padding:1px 4px;margin-left:4px}
 .fic-tec{margin-top:14px;font-size:14px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:4px 16px}
 .fic-tec b{color:var(--ink)}
+
+/* fotos pequenas nas listas de marcadores */
+.av{position:relative;display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;overflow:hidden;background:var(--paper-2);border:1px solid var(--line);flex:none;vertical-align:middle}
+.av i{font-style:normal;font-size:12px;font-weight:800;color:var(--ink-2)}
+.av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 15%}
+.mkj{display:inline-flex;align-items:center;gap:12px}
+.doc.mkd{grid-template-columns:44px 38px 1fr auto;gap:14px}
+@media(max-width:720px){.doc.mkd{grid-template-columns:30px 38px 1fr auto}.mkt .av{width:32px;height:32px}.mkj{gap:9px}}
+
+/* tutorial */
+#tut{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;padding:20px;background:rgba(18,18,18,.62);backdrop-filter:blur(5px);animation:tut-in .25s ease-out}
+#tut.sai{opacity:0;transition:opacity .25s}
+.tut-card{position:relative;width:min(460px,100%);background:var(--paper);color:var(--ink);padding:34px 30px 26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.tut-skip{position:absolute;top:16px;right:20px;font-size:13px;font-weight:700;color:var(--ink-2);text-decoration:underline;text-underline-offset:3px;padding:6px}
+.tut-ic{width:84px;height:84px;margin:6px auto 18px;display:grid;place-items:center;font-size:40px;background:var(--red);color:#fff;border-radius:0 28px 0 28px}
+.tut-card h2{font-size:clamp(24px,5.5vw,32px);margin:8px 0 12px}
+.tut-card p{color:var(--ink-2);font-size:16px;line-height:1.5;min-height:6em}
+.tut-card p b{color:var(--ink)}
+.tut-dots{display:flex;gap:6px;justify-content:center;margin:18px 0 20px}
+.tut-dots i{width:22px;height:5px;border-radius:3px;background:var(--line)}
+.tut-dots i.on{background:var(--red)}
+.tut-btns{display:flex;justify-content:space-between;gap:12px}
+.tut-btns .btn.o{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
+@keyframes tut-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){#tut{animation:none}}

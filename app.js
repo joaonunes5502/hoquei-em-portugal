@@ -181,6 +181,9 @@ const crest = (eid, size) => crestC(clubOfTeam(eid) || { nome: B.equipas.get(eid
 const pName = p => p.nome_publico || p.nome;
 const pNum = p => p.numero_manual ?? p.numero;
 const pFoto = p => p.foto_custom || p.foto_url;
+// fotos pequenas dos jogadores (listas de marcadores)
+async function fotosDe(ids) { ids = [...new Set(ids.filter(x => x != null))]; if (!ids.length) return new Map(); const js = await q("jogadores", { select: "id,foto_url,foto_custom", in: { id: ids } }); return new Map(js.map(j => [j.id, pFoto(j)])); }
+const avatar = (foto, nome) => `<span class="av">${foto ? `<img src="${esc(foto)}" alt="" loading="lazy" onerror="this.remove()">` : ""}<i>${esc((nome || "?").trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase())}</i></span>`;
 const norm = s => String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const pad = i => String(i + 1).padStart(2, "0");
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Lisbon" }).format(new Date());
@@ -222,7 +225,7 @@ function buildMenu() {
   $("#menuCols").innerHTML = `<div class="big"><h5>Competições</h5>${compsPrincipais().map((c, i) => `<a href="#/competicao/${c.id}"><small>${pad(i)}</small>${esc(pn(c))}</a>`).join("")}</div>
   <div>${sm("Mais competições", compsMais().filter(c => !europeia(c)).map(c => [pn(c), "#/competicao/" + c.id]).concat([["Seleções", "#/selecoes"]]))}${compsMais().some(europeia) ? sm("Europa", compsMais().filter(europeia).map(c => [pn(c), "#/competicao/" + c.id])) : ""}</div>
   <div>${sm("Conteúdos", [["Notícias", "#/noticias"], ["Equipa da Jornada", "#/equipa-da-jornada"], ["Mercado", "#/mercado"], ["Onde ver", "#/onde-ver"], ["Clubes", "#/clubes"]])}</div>
-  <div>${sm("A tua app", [["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
+  <div>${sm("A tua app", [["❓ Como usar", "#/ajuda"], ["📲 Instalar a app", "#/instalar"], ["🔔 Notificações", "#/notificacoes"]])}${sm("Hóquei em Português", [["Sobre", "#/sobre"], ["Envia a tua notícia", "#/sobre"], ["Instagram ↗", "https://www.instagram.com/" + (CFG.INSTAGRAM || "hoqueiemportugues") + "/"]])}</div>`;
   $("#footComps").innerHTML = compsPrincipais().map(c => `<a href="#/competicao/${c.id}">${esc(pn(c))}</a>`).join("");
 }
 function openMenu() { $("#menu").classList.add("open"); document.body.style.overflow = "hidden"; setTimeout(() => $("#q").focus(), 50); }
@@ -262,6 +265,7 @@ async function pHome() {
     q("mercado", { order: [["data", false]], limit: 5 }),
     q("equipa_jornada", { order: [["criado_em", false]], limit: 1 })]);
   const tv = (await q("jogos", { gte: { data: today() }, order: [["data", true], ["hora", true]], limit: 40 })).filter(j => compById(j.competicao_id) && (j.canal_tv || j.tv_url)).slice(0, 4);
+  const fotosMk = await fotosDe(mk.map(m => m.jogador_id));
   const feat = (news.filter(n => n.destaque).length ? news.filter(n => n.destaque) : news).slice(0, 3);
   const rest = news.filter(n => !feat.includes(n));
   const jor = ultimaJornada(jogosP), last = jogosP.filter(j => j.jornada === jor);
@@ -278,7 +282,7 @@ async function pHome() {
     <div>${sh("03", "Tabela", ["Completa", `#/competicao/${c.id}`])}${cls.length ? `<table class="mtab"><thead><tr><th>#</th><th>Clube</th><th class="c">J</th><th class="c">DG</th><th class="c">Pts</th></tr></thead><tbody>${cls.slice(0, 8).map(r => `<tr${zonaAttr(c, r.pos)}><td><span class="pos">${r.pos}</span></td><td style="font-weight:600"><a href="#/clube/${teamKey(r.equipa_id)}">${crest(r.equipa_id)}${esc(tName(r.equipa_id))}</a></td><td class="c num">${r.j}</td><td class="c num">${r.dg > 0 ? "+" : ""}${r.dg}</td><td class="c pts">${r.pts}</td></tr>`).join("")}</tbody></table>${zonasLegenda(c)}` : empty("A classificação aparece depois da 1ª jornada.")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="grid-template-columns:${ej.length ? "1.4fr 1fr" : "1fr"};gap:56px">
     ${ej.length ? `<div>${sh("04", "Equipa da Jornada", ["Ver", "#/equipa-da-jornada"])}${rinkTeam(ej[0])}${sponsor("equipa_jornada")}</div>` : ""}
-    <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span><b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
+    <div>${sh(ej.length ? "05" : "04", "Marcadores", c ? ["Top", `#/competicao/${c.id}/3`] : null)}<div class="docs">${mk.map(m => `<a class="doc mkd" href="#/jogador/${m.jogador_id}"><span class="d">${pad(m.pos - 1)}</span>${avatar(fotosMk.get(m.jogador_id), m.nome)}<b>${esc(m.nome)}<br><small style="font-weight:400;color:var(--ink-2)">${esc(clubName(B.clubes.get(m.clube_id)))}</small></b><span class="pts" style="font-size:26px">${m.golos}</span></a>`).join("") || empty("Ainda sem golos registados.")}</div></div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap">${sh("06", "Competições")}<div class="compcards">${[...compsPrincipais(), ...compsMais()].map(x => `<a class="cc rink-r" href="#/competicao/${x.id}"><span class="ar">↗</span><span class="lbl">${esc(cardSub(x))}</span><span class="x">${esc(pn(x))}</span></a>`).join("")}</div></div></section>`;
   s += `<section style="padding-top:20px"><div class="wrap grid g2" style="gap:56px"><div>${sh("07", "Mercado", ["Todas as mexidas", "#/mercado"])}${mkt.map(trRow).join("") || empty("Sem movimentos registados.")}</div><div>${sh("08", "Onde ver", ["Agenda", "#/onde-ver"])}${tv.map(tvRow).join("") || empty("Sem transmissões anunciadas.")}</div></div></section>`;
   s += `<div class="newsband"><div class="wrap"><div><span class="lbl" style="color:rgba(255,255,255,.7)">Newsletter</span><h2 class="x" style="margin-top:10px">A jornada inteira<br>no teu email.</h2><p style="opacity:.85;margin-top:14px;max-width:460px;font-size:18px">Resultados, tabela, equipa da jornada e as mexidas do mercado, todas as semanas.</p></div><form id="nlf"><input class="input" type="email" name="email" placeholder="o-teu@email.pt" required><button class="btn">Subscrever</button><label><input type="checkbox" required> Aceito receber a newsletter do Hóquei em Português</label></form></div></div>`;
@@ -339,7 +343,8 @@ async function pComp(id, tab) {
     const prox = jogos.filter(j => j.golos_casa == null).sort((a, b) => (a.data || "9").localeCompare(b.data || "9") || (a.hora || "").localeCompare(b.hora || ""));
     body = prox.map(j => matchRow(j)).join("") || empty("Não há jogos por disputar.");
   } else {
-    body = mk.length ? `<table><thead><tr><th>#</th><th>Jogador</th><th>Clube</th><th class="c">Golos</th></tr></thead><tbody>${mk.map(m => `<tr class="${m.pos <= 3 ? "q" : ""}"><td><span class="pos">${m.pos}</span></td><td style="font-weight:600"><a href="#/jogador/${m.jogador_id}">${esc(m.nome)}</a></td><td><a href="#/clube/${m.clube_id}">${crestC(B.clubes.get(m.clube_id))}${esc(clubName(B.clubes.get(m.clube_id)))}</a></td><td class="c pts">${m.golos}</td></tr>`).join("")}</tbody></table>` : empty("Ainda sem marcadores.");
+    const fotos = await fotosDe(mk.map(m => m.jogador_id));
+    body = mk.length ? `<table class="mkt"><thead><tr><th>#</th><th>Jogador</th><th>Clube</th><th class="c">Golos</th></tr></thead><tbody>${mk.map(m => `<tr class="${m.pos <= 3 ? "q" : ""}"><td><span class="pos">${m.pos}</span></td><td style="font-weight:600"><a class="mkj" href="#/jogador/${m.jogador_id}">${avatar(fotos.get(m.jogador_id), m.nome)}${esc(m.nome)}</a></td><td><a href="#/clube/${m.clube_id}">${crestC(B.clubes.get(m.clube_id))}${esc(clubName(B.clubes.get(m.clube_id)))}</a></td><td class="c pts">${m.golos}</td></tr>`).join("")}</tbody></table>` : empty("Ainda sem marcadores.");
   }
   return { html: hd([["Competições"], [P.nome]], P.nome, (sep.label ? sep.label + " · " : "") + "Época 2026/27", ["Classificação", "Jornadas", "Calendário", "Marcadores"], tab, base) + `<section style="padding-top:36px"><div class="wrap">${chips}${zchips}${sponsor("competicao")}${body}<p class="note">Fonte: hp.fpp.pt · atualizado ${esc(c.atualizado_em ? new Date(c.atualizado_em).toLocaleString("pt-PT") : "")}</p></div></section>`, after };
 }
@@ -667,7 +672,7 @@ async function go(path) {
   document.querySelectorAll("#quick a, .tabbar a").forEach(a => a.classList.toggle("on", a.dataset.k === (top || (p[0] === "" ? "home" : ""))));
   window.scrollTo(0, 0);
 }
-document.addEventListener("click", e => { const a = e.target.closest("a"); if (!a) return; const h = a.getAttribute("href"); if (h === "#/instalar") { e.preventDefault(); instalarApp(); return; } if (h && h.startsWith("#/")) { e.preventDefault(); go(h.slice(1)); } });
+document.addEventListener("click", e => { const a = e.target.closest("a"); if (!a) return; const h = a.getAttribute("href"); if (h === "#/instalar") { e.preventDefault(); instalarApp(); return; } if (h === "#/ajuda") { e.preventDefault(); tutorial(true); return; } if (h && h.startsWith("#/")) { e.preventDefault(); go(h.slice(1)); } });
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== cur) go(h); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
 
@@ -685,9 +690,40 @@ function setTheme(t) { document.documentElement.dataset.theme = t; if (temaAtual
   $("#spBar").innerHTML = sponsor("rodape"); afterSponsors($("#spBar"));
   $("#gerirCookies").onclick = e => { e.preventDefault(); gerirCookies(); };
   go(location.hash.slice(1) || "/");
+  setTimeout(() => { if (!document.getElementById("intro")) tutorial(); else setTimeout(tutorial, 2800); }, 900); // só na 1.ª visita
   // atualiza o placar e a página do jogo de 2 em 2 minutos (o robô corre de 10 em 10)
   setInterval(() => { cache.clear(); board(); if (/^\/jogo\//.test(cur || "")) go(cur); }, 120000);
 })();
+
+/* ---------------- tutorial (1.ª abertura; repete-se em Menu > Como usar) ---------------- */
+const TUTORIAL = [
+  ["🏒", "Bem-vindo ao Hóquei em Português", "Resultados, classificações, plantéis e notícias do hóquei em patins português, sempre atualizados. Em 30 segundos mostramos-te o essencial."],
+  ["📊", "Todas as competições", "Em <b>Jogos</b> escolhes a prova (Campeonato Placard, 2ª Divisão, Taça de Portugal…). Dentro de cada uma há separadores: <b>Norte / Sul</b>, classificação, jornadas, calendário e marcadores. Nas taças vês o <b>quadro</b> das eliminatórias."],
+  ["⚫️", "O jogo ao pormenor", "Toca em qualquer jogo para veres a <b>linha de jogo</b>: golos, cartões, time-outs e faltas, minuto a minuto, mais as estatísticas e os plantéis."],
+  ["🔔", "Segue as tuas equipas", "Na página de uma equipa (ou de um jogo) toca em <b>Seguir</b>. Recebes uma notificação quando o jogo começa e outra com o resultado final. Sem conta, sem login."],
+  ["📲", "Põe a app no ecrã", "Em <b>Mais → Instalar a app</b> ficas com o Hóquei em Português no ecrã do telemóvel, como uma app normal. No iPhone é preciso instalar para receber notificações."],
+  ["☾", "Últimos truques", "O botão <b>☾</b> no topo muda para o modo noite. Em <b>Mais</b> tens a pesquisa, o mercado, onde ver os jogos na TV e, sempre que precisares, este guia em <b>Como usar</b>."]
+];
+function tutorial(forcar) {
+  if (!forcar) { try { if (localStorage.getItem("hp-tutorial")) return; } catch (e) { return; } }
+  if (document.getElementById("tut")) return;
+  closeMenu();
+  let i = 0;
+  const el = document.createElement("div");
+  el.id = "tut"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", "Como usar o Hóquei em Português");
+  const fechar = () => { try { localStorage.setItem("hp-tutorial", "1"); } catch (e) { } el.classList.add("sai"); setTimeout(() => el.remove(), 250); document.removeEventListener("keydown", tecla); };
+  const pintar = () => {
+    const [ic, t, x] = TUTORIAL[i], ult = i === TUTORIAL.length - 1;
+    el.innerHTML = `<div class="tut-card rink"><button class="tut-skip" data-a="x">${ult ? "Fechar" : "Saltar"}</button><div class="tut-ic" aria-hidden="true">${ic}</div><span class="lbl">${i + 1} de ${TUTORIAL.length}</span><h2 class="x">${esc(t)}</h2><p>${x}</p>
+      <div class="tut-dots">${TUTORIAL.map((_, k) => `<i class="${k === i ? "on" : ""}"></i>`).join("")}</div>
+      <div class="tut-btns">${i ? `<button class="btn o" data-a="p">← Anterior</button>` : "<span></span>"}<button class="btn" data-a="${ult ? "x" : "n"}">${ult ? "Começar" : "Seguinte →"}</button></div></div>`;
+    el.querySelector(".tut-btns .btn:last-child").focus();
+  };
+  const tecla = e => { if (e.key === "Escape") fechar(); else if (e.key === "ArrowRight" && i < TUTORIAL.length - 1) { i++; pintar(); } else if (e.key === "ArrowLeft" && i) { i--; pintar(); } };
+  el.onclick = e => { const a = e.target.closest("[data-a]")?.dataset.a; if (a === "x") fechar(); else if (a === "n") { i++; pintar(); } else if (a === "p") { i--; pintar(); } };
+  document.addEventListener("keydown", tecla);
+  document.body.appendChild(el); pintar();
+}
 
 /* ---------------- app instalável e notificações ---------------- */
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);

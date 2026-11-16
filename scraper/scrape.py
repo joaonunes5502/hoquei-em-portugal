@@ -518,11 +518,21 @@ class Robo:
         """nome normalizado -> [(id, escalão)] de todas as equipas conhecidas (lido 1x por execução)."""
         if getattr(self, "_indice", None) is None:
             comps = {c["id"]: c for c in self.db.select("competicoes", "select=id,nome,grupo")}
-            self._indice = {}
+            self._indice, self._esc_eq = {}, {}
             for e in self.db.select("equipas", "select=id,nome,competicao_id"):
                 c = comps.get(e.get("competicao_id")) or {}
                 self._indice.setdefault(chave_nome(e["nome"]), []).append((e["id"], escalao(c)))
+                self._esc_eq[e["id"]] = escalao(c)
         return self._indice
+
+    def equipa_certa(self, eid, nome, esc):
+        """O hp.fpp.pt às vezes liga a equipa errada do clube (ex.: a masculina num jogo feminino).
+        Se a equipa indicada é de outro escalão e existe uma com o mesmo nome no escalão certo, usa essa."""
+        idx = self.indice_equipas()
+        if eid is None or self._esc_eq.get(eid, esc) == esc:
+            return eid
+        certos = [i for i, e in idx.get(chave_nome(nome or ""), []) if e == esc]
+        return certos[0] if certos else eid
 
     def equipas_pelo_nome(self, cid, jogos):
         """Taças: o calendário só traz nomes. Usa os ids que a ficha do jogo já deu; senão procura pelo nome
@@ -535,7 +545,7 @@ class Robo:
             for lado in ("casa", "fora"):
                 if j[lado + "_id"] is not None:
                     continue
-                j[lado + "_id"] = (antes.get(j["id"]) or {}).get(lado + "_id")
+                j[lado + "_id"] = self.equipa_certa((antes.get(j["id"]) or {}).get(lado + "_id"), j[lado + "_nome"], esc)
                 if j[lado + "_id"] is None:
                     cand = idx.get(chave_nome(j[lado + "_nome"]), [])
                     certos = [i for i, e in cand if e == esc] or ([i for i, e in cand] if len(cand) == 1 else [])
@@ -599,7 +609,11 @@ class Robo:
                 ids.append(None)
         casa_id, fora_id = j.get("casa_id"), j.get("fora_id")
         if len(ids) == 2 and all(ids):
-            casa_id, fora_id = ids          # a ficha diz exatamente que equipas são (importante nas taças)
+            # a ficha diz que equipas são (importante nas taças), mas confirma-se o escalão: a FPP por vezes engana-se
+            if j["id"] >= TACA and j.get("competicao_id"):
+                comp = (self.db.select("competicoes", f"select=nome,grupo&id=eq.{j['competicao_id']}") or [{}])[0]
+                ids = [self.equipa_certa(i, info["logos"][k][3], escalao(comp)) for k, i in enumerate(ids)]
+            casa_id, fora_id = ids
             upd["casa_id"], upd["fora_id"] = ids
 
         for lado, equipa_id in zip(("casa", "fora"), (casa_id, fora_id)):

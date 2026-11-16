@@ -66,5 +66,19 @@ assert row["casa_id"] == 2001 and row["fora_id"] == 2050 and row["arbitros"] == 
 r.get = lambda path, params=None: pag[path]
 r.calendario(510)
 assert db.t["jogos"][(scrape.TACA + 100892,)]["fora_id"] == 2050
+# a FPP ligou a equipa masculina na ficha de um jogo feminino (aconteceu na final da Elite Cup Feminina):
+# o robô fica com a equipa feminina e não mistura os plantéis
+FICHA2 = FICHA.replace("/Equipa/510/2001", "/Equipa/510/1181").replace("/Equipa/510/2050", "/Equipa/510/2002").replace("Escola Livre A", "AD Sanjoanense/Delba") + \
+    '<div id="Equipas"><div class="team"><div class="player"><img src="/FED_900001.png"><p>N.º 13 - Aimee Blackman (5i)</p></div></div><div class="team"></div></div>'
+r2 = scrape.Robo(db); r2.get = lambda path, params=None: FICHA2 if path.startswith("/jogoTaca/") else pag.get(path, "")
+r2.jogo(dict(out[scrape.TACA + 100894]))
+fin = db.t["jogos"][(scrape.TACA + 100894,)]
+assert fin["casa_id"] == 2001 and fin["fora_id"] == 2002, fin
+assert (2001, 900001) in db.t["plantel"] and (1181, 900001) not in db.t["plantel"], "a jogadora tem de ir para a equipa feminina"
+# e um jogo já guardado com a equipa errada é corrigido na leitura seguinte do calendário
+db.t["jogos"][(scrape.TACA + 100894,)]["casa_id"] = 1181
+r3 = scrape.Robo(db); r3.get = lambda path, params=None: pag[path]; r3.calendario(510)
+assert db.t["jogos"][(scrape.TACA + 100894,)]["casa_id"] == 2001
+print("EQUIPA ERRADA NA FICHA OK")
 print("FICHA DA TAÇA OK")
 print("TODOS OS TESTES DAS TAÇAS PASSARAM")
