@@ -489,3 +489,26 @@ tr[data-z] td:first-child{box-shadow:inset 4px 0 var(--zc)}
 .zleg i{width:12px;height:12px;border-radius:50%;flex:none}
 .zleg small{font-family:"IBM Plex Mono";font-size:11px;opacity:.8}
 @media (max-width:720px){.zleg{font-size:12px;gap:6px 14px}}
+
+/* destaque da página inicial: foto ao lado (PC) e foto de fundo (telemóvel/tablet) */
+.hero-grid{align-items:stretch}
+.hero-grid > div:first-child{display:flex;flex-direction:column;justify-content:center}
+.hero .ph{aspect-ratio:auto;min-height:420px;border-radius:28px;overflow:hidden;display:block}
+.hero .ph .imgbox{position:absolute;inset:0;border-radius:0}
+.hero .ph .num{left:auto;right:14px;bottom:14px;top:auto;background:rgba(18,18,18,.55);color:#F2EEE6;padding:5px 10px;border-radius:999px;font-size:11px;z-index:2;backdrop-filter:blur(4px)}
+@media(max-width:1000px){
+  .hero:has(.hero-grid){padding:0}
+  .hero:has(.hero-grid) .rinkline{display:none}
+  .hero-grid{position:relative;display:flex;flex-direction:column;justify-content:flex-end;min-height:min(78vh,560px);padding-top:90px;padding-bottom:26px;max-width:none}
+  .hero-grid > div:first-child{position:relative;z-index:1;color:#F2EEE6;pointer-events:none}
+  .hero-grid > div:first-child a,.hero-grid > div:first-child button{pointer-events:auto}
+  .hero .ph{position:absolute;inset:0;min-height:0;margin:0;border-radius:0;z-index:0}
+  .hero .ph::after{content:"";position:absolute;inset:0;z-index:1;background:linear-gradient(180deg,rgba(18,18,18,.15) 0%,rgba(18,18,18,.55) 40%,rgba(18,18,18,.92) 100%)}
+  .hero .ph .num{top:14px;bottom:auto;right:14px}
+  .hero-grid h1.x{color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.35)}
+  .hero-grid p.lead{color:rgba(242,238,230,.88)}
+  .hero-grid .meta .lbl,.hero-grid .ctrl .lbl{color:rgba(242,238,230,.8)}
+  .hero-grid .ctrl button.dot{background:rgba(255,255,255,.3)}
+  .hero-grid .ctrl button.dot.on{background:#fff}
+  .hero-grid .btn{background:#fff;color:#121212;border-color:#fff}
+}
